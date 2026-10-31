@@ -157,6 +157,7 @@ Test, typecheck, build and lint runs (JavaScript/TypeScript, Python, Go, Rust, N
 - Switching a task's model starts its prompt cache afresh.
 - A slow Haiku reading arrives during the turn; the first requests use the session's own effort.
 - The notes to Claude are instructions, not enforcement.
+- The desktop app cannot open a sub-agent from the band: after the first try, the band lists them as labels.
 
 </details>
 

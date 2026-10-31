@@ -1,17 +1,17 @@
-import type { EngineInterface } from 'claude-code'
 import { expect, test } from 'claude-code/testing'
+import type { Engine } from 'claude-code/testing'
 
 import { bandText, engine, fail, request, start, type } from './engine'
 
 const NEEDS_OPUS = 'clarity=goal hard=no risky=no size=small model=opus sure=85'
 
 /** Claude reports the person's answer to the model offer. */
-function answer($: EngineInterface, choice: string) {
+function answer($: Engine, choice: string) {
   return $.tool.call({ tool: 'mcp__open-effort__model', choice } as never)
 }
 
 /** A session on Sonnet 5.5: its first request names its model. */
-async function onSonnet($: EngineInterface) {
+async function onSonnet($: Engine) {
   await start($)
   await request($, 'high', 0, 'claude-sonnet-5-5')
 }

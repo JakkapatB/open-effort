@@ -1,5 +1,5 @@
 import { expect, test } from 'claude-code/testing'
-import type { EngineInterface } from 'claude-code'
+import type { Engine } from 'claude-code/testing'
 
 import { MATT_SKILLS, bandText, engine, fail, finish, paneText, pressPane, request, start, type } from './engine'
 
@@ -15,7 +15,7 @@ const STAGE_EFFORTS = [
   ['retro', 'medium'],
 ] as const
 
-async function stage($: EngineInterface, name: string) {
+async function stage($: Engine, name: string) {
   return $.tool.call({ tool: 'mcp__open-effort__stage', stage: name } as never)
 }
 
@@ -24,7 +24,7 @@ async function flow(on: Parameters<typeof engine>[0], options: Parameters<typeof
 }
 
 /** The effort of a main-session request sent now. */
-async function effortNow($: EngineInterface, sent: { effort?: unknown }[], index = 0) {
+async function effortNow($: Engine, sent: { effort?: unknown }[], index = 0) {
   await request($, 'high', index)
   return sent[sent.length - 1]?.effort
 }

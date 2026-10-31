@@ -1,12 +1,12 @@
 import { expect, test } from 'claude-code/testing'
-import type { EngineInterface } from 'claude-code'
+import type { Engine } from 'claude-code/testing'
 
 import { agentRequest, engine, fail, request, run, start, type } from './engine'
 
 const GOAL = 'clarity=goal hard=no risky=no size=small'
 
 /** Claude starts a sub-agent; what the Agent call went out with is the last call the engine saw. */
-async function spawn($: EngineInterface, calls: Record<string, unknown>[], input: Record<string, unknown>) {
+async function spawn($: Engine, calls: Record<string, unknown>[], input: Record<string, unknown>) {
   await $.tool.call({ tool: 'Agent', description: 'look around', prompt: 'find where coupons are applied', ...input })
   const call = calls[calls.length - 1] ?? {}
   return { model: call.model, effort: call.effort }

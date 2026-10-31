@@ -1,5 +1,6 @@
-import type { EngineInterface, TurnStepInput } from 'claude-code'
+import type { TurnStepInput } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
+import type { Engine } from 'claude-code/testing'
 
 import { MATT_SKILLS, engine, request, run, start, type } from './engine'
 
@@ -12,12 +13,12 @@ const FILES = {
   'work/coupons/issues/05-unlabelled.md': '# Stack coupons\n\nLet two coupons stack.',
 }
 
-async function stage($: EngineInterface, name: string) {
+async function stage($: Engine, name: string) {
   return $.tool.call({ tool: 'mcp__open-effort__stage', stage: name } as never)
 }
 
 /** A session in the Main Flow's implement stage, on Opus 5.5. */
-async function implementing($: EngineInterface) {
+async function implementing($: Engine) {
   await start($)
   await request($, 'high', 0)
   await type($, 'add coupons to checkout')
@@ -25,7 +26,7 @@ async function implementing($: EngineInterface) {
 }
 
 /** One request of a sub-agent's loop, on the model and effort its Agent call gave it. */
-async function agentStep($: EngineInterface, agentId: string, model: string, effort: NonNullable<TurnStepInput['effort']>, index: number) {
+async function agentStep($: Engine, agentId: string, model: string, effort: NonNullable<TurnStepInput['effort']>, index: number) {
   const stream = $.turn.step({ turnId: `t-${agentId}`, index, model, effort, messageCount: 1, agentId })
   for await (const _ of stream) {
     // the chunks are not what these tests look at
@@ -111,4 +112,16 @@ test('outside the implement stage a ticket path in an Agent prompt changes nothi
 
   const agentCall = calls.find(c => c.tool === 'Agent')
   expect(agentCall?.model).toBeUndefined()
+})
+
+test('on a Sonnet session in the flow, a ticket with no Model line runs its sub-agent on the flow’s model', async ($, on) => {
+  const { calls } = engine(on, { haiku: LARGE, matt: MATT_SKILLS, files: FILES, model: 'claude-sonnet-5-5' })
+  await start($)
+  await request($, 'high', 0, 'claude-sonnet-5-5')
+  await type($, 'add coupons to checkout')
+  await stage($, 'implement')
+  await $.tool.call({ tool: 'Agent', description: 'ticket 04', prompt: `Implement ${T4} with TDD.` } as never)
+
+  const agentCall = calls.find(c => c.tool === 'Agent')
+  expect([agentCall?.model, agentCall?.effort]).toEqual(['opus', 'low'])
 })

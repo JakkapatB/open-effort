@@ -135,6 +135,8 @@ declare module 'claude-code' {
       handed: Record<string, { ticket: string } & TicketSetting>
       /** Counts new tasks, so a late score applies only to the task it was asked for. */
       scoring: number
+      /** Whether the surface can put an agent's transcript in view; false once it said it draws no main view. */
+      canView: boolean
       /** The Main Flow skills this session lacks; empty when Matt Pocock's skills are installed. */
       missing: string[]
       turnLog: TurnLog

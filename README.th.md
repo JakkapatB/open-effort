@@ -123,11 +123,11 @@ effort ของ sub-agent แบบ general-purpose จะเท่ากับ
 - **เปิด/ปิด** สำหรับโปรเจกต์นี้ (หรือพิมพ์ `/open-effort on` / `off`)
 - **Main Flow:** เปิด/ปิด และเลือกโมเดลที่จะใช้
 - **ภาษา:** อัตโนมัติ, ไทย หรือ English
-- **ธีมสี:** Claude, Lime, Ocean หรือ Rose
+- **ธีมสี:** Claude, มะนาว, ฟ้า หรือ ชมพู
 - **ประวัติ:** 500 turn ล่าสุดของโปรเจกต์
 
 <p align="center">
-  <img src="docs/images/themes.png" width="640" alt="ธีมสี 4 แบบ: Claude, Lime, Ocean และ Rose">
+  <img src="docs/images/themes.png" width="640" alt="ธีมสี 4 แบบ: Claude, มะนาว, ฟ้า และ ชมพู">
 </p>
 
 <details>
@@ -159,6 +159,7 @@ effort ของ sub-agent แบบ general-purpose จะเท่ากับ
 - ถ้าเปลี่ยนโมเดลของงาน prompt cache ของงานนั้นจะต้องเริ่มใหม่
 - ถ้า Haiku ตอบช้า request แรกๆ ของ turn นั้นจะใช้ effort ของ session ไปก่อน
 - ข้อความที่ mod ส่งให้ Claude เป็นแค่คำแนะนำ Claude อาจไม่ทำตามทุกครั้ง
+- แอป desktop เปิด sub-agent จากแถบไม่ได้ พอลองกดครั้งแรกแล้ว แถบจะแสดงรายชื่อ sub-agent เป็นข้อความธรรมดาแทนปุ่ม
 
 </details>
 

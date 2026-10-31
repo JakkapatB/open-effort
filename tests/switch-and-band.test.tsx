@@ -1,6 +1,7 @@
 import { expect, test } from 'claude-code/testing'
+import type { Engine } from 'claude-code/testing'
 
-import { BAND, SURFACES, bandText, engine, fail, request, run, start } from './engine'
+import { BAND, PRESENTATION, SURFACES, bandText, engine, fail, request, run, start } from './engine'
 
 test('the band shows the effort the session is using', async ($, on) => {
   engine(on)
@@ -42,7 +43,7 @@ test('the person turns the mod off, and the band then draws nothing of the mod',
   await start($)
   await request($, 'high')
 
-  await $.command.run({ command: 'open-effort', args: 'off', origin: { kind: 'composer' } })
+  await $.command.run({ command: 'open-effort', args: 'off', origin: { kind: 'composer' }, presentation: PRESENTATION })
 
   expect(await bandText($)).toBeUndefined()
 })
@@ -60,7 +61,7 @@ test('only the person can turn the mod off', async ($, on) => {
   await start($)
   await request($, 'high')
 
-  await $.command.run({ command: 'open-effort', args: 'off', origin: { kind: 'plugin', name: 'someone-else' } })
+  await $.command.run({ command: 'open-effort', args: 'off', origin: { kind: 'plugin', name: 'someone-else' }, presentation: PRESENTATION })
 
   expect(await bandText($)).toBeDefined()
 })
@@ -143,7 +144,7 @@ test('sub-agents at work branch off the flow, each a card that opens its transcr
   expect(left).toContain('agent-a2')
 })
 
-async function bandDrawn($: Parameters<Parameters<typeof test>[1]>[0]) {
+async function bandDrawn($: Engine) {
   const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
   const drawn = JSON.stringify(await ui.drawn())
   await ui.unmount()
@@ -169,10 +170,31 @@ test('many sub-agents still make one node, their buttons wrapping to the band', 
 test('/open-effort off switches this project off, leaving the machine’s default for others', async ($, on) => {
   const { where } = engine(on)
   await start($)
-  await $.command.run({ command: 'open-effort', args: 'off', origin: { kind: 'composer' } })
+  await $.command.run({ command: 'open-effort', args: 'off', origin: { kind: 'composer' }, presentation: PRESENTATION })
   expect(await bandText($)).toBeUndefined()
 
   where.root = '/work/other'
   await $.session.start({ cwd: '/work/other', surface: 'desktop', isInteractive: true })
   expect(await bandText($)).toBeDefined()
+})
+
+test('where the surface draws no main view, a press says so once and the agents become plain labels', async ($, on) => {
+  const { viewed } = engine(on, { haiku: 'clarity=goal hard=no risky=no size=small', viewDeny: 'no main view here' })
+  await start($)
+  await $.prompt.submit({ text: 'add a coupon field', wait: false, origin: { kind: 'composer' } })
+  await request($, 'high')
+  await $.turn.start({ text: 'review', turnId: 'ta', agentId: 'a1' })
+
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  await ui.press({ key: 'agent-a1' })
+  await ui.unmount()
+  expect(viewed).toEqual(['a1'])
+
+  const after = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const drawn = JSON.stringify(await after.drawn())
+  await after.unmount()
+  expect(drawn).toContain('general-purpose')
+  // The pane's ≡ is the band's only button left; the agent is a label.
+  expect(drawn.split('"type":"Button"').length - 1).toBe(1)
+  expect(drawn).toContain('"type":"Box","props":{"key":"agent-a1"')
 })

@@ -1,5 +1,6 @@
 import type { Clarity, Effort, HistoryEntry, Language, Score, Stage } from '../types'
 import { FAILS_TO_STALL, isFable } from './policy'
+import { isUnsure } from './score'
 
 /** Thai when Claude Code's `language` setting names Thai (`thai`, `th`, `ไทย`, any case), else English. */
 export function languageOf(setting: unknown): Language {
@@ -21,8 +22,6 @@ export type Words = {
   band: (effort: Effort | null, isOnFable: boolean, why: Why, stage: Stage | null) => string
   /** Why the effort is what it is, alone: the band's reason. */
   reason: (why: Why) => string
-  /** The band diagram's node titles and edge labels. */
-  flow: FlowWords
   /** The band's steps: what the mod did and does, and the values it shows. */
   steps: StepWords
   status: (isOn: boolean) => string
@@ -33,13 +32,10 @@ export type Words = {
 export type StepWords = {
   read: string
   effort: string
-  checks: string
-  model: string
   noScore: string
+  /** The effort's value before the session's own is seen. */
+  own: string
   stage: string
-  watching: string
-  failing: (n: number) => string
-  raised: string
   atEnd: string
   climbed: string
   failed: string
@@ -52,30 +48,17 @@ export type StepWords = {
   agentsAt: (n: number) => string
   /** Opening an agent's transcript was refused, and why. */
   viewDenied: (reason: string) => string
-  none: string
-}
-
-export type FlowWords = {
-  why: string
-  start: string
-  now: string
-  steady: string
-  climbed: string
-  own: string
+  /** This app cannot open an agent from the band at all. */
+  viewUnavailable: string
 }
 
 export type PaneWords = {
   switches: string
-  thisMachine: string
-  thisProject: (name: string) => string
   useHere: (name: string) => string
   advanced: string
   defaults: string
-  machine: (isOn: boolean) => string
-  project: (name: string, isOn: boolean | null) => string
   on: string
   off: string
-  follow: string
   mainFlow: string
   missing: (skills: readonly string[]) => string
   install: string
@@ -111,8 +94,7 @@ type Phrases = {
 }
 
 function scoreWords(p: Phrases, score: Score): string {
-  const unsure = score.confidence !== undefined && score.confidence < 60
-  return [p.clarity[score.clarity], score.isHard ? p.hard : '', score.isRisky ? p.risky : '', unsure ? p.unsure : ''].filter(Boolean).join(' · ')
+  return [p.clarity[score.clarity], score.isHard ? p.hard : '', score.isRisky ? p.risky : '', isUnsure(score) ? p.unsure : ''].filter(Boolean).join(' · ')
 }
 
 function reasonOf(p: Phrases) {
@@ -185,17 +167,12 @@ const EN: Words = {
   commandDescription: 'open-effort: open its pane; "on" or "off" switches it for this project',
   band: bandOf(EN_PHRASES),
   reason: reasonOf(EN_PHRASES),
-  flow: { why: 'Why', start: 'Start', now: 'Now', steady: 'steady', climbed: 'climbed', own: 'session' },
   steps: {
     read: 'Haiku read it',
     effort: 'Effort',
-    checks: 'Checks',
-    model: 'Model',
     noScore: 'no score',
+    own: 'session',
     stage: 'Main Flow',
-    watching: 'watching',
-    failing: n => `${n}/${FAILS_TO_STALL} failing`,
-    raised: 'raised',
     atEnd: 'asking you',
     climbed: 'Climbed',
     failed: 'Check failed',
@@ -205,22 +182,17 @@ const EN: Words = {
     agents: 'Sub-agents',
     agentsAt: n => `${n} working`,
     viewDenied: reason => `Could not open the agent: ${reason}`,
-    none: 'none',
+    viewUnavailable: "This app can't open an agent from the band. Open it from the app's own task list.",
   },
   status: isOn => (isOn ? 'on for this project.' : 'off for this project: it changes nothing here until you turn it on with /open-effort on.'),
   onlyPerson: 'only the person can switch it, by typing /open-effort on or off.',
   pane: {
     switches: 'Switch',
-    thisMachine: 'This machine',
     useHere: name => `Use in this project · ${name}`,
     advanced: 'Advanced · this machine',
     defaults: 'The default for projects you have not switched yourself.',
-    thisProject: name => `This project · ${name}`,
-    machine: isOn => `This machine: ${isOn ? 'on' : 'off'}`,
-    project: (name, isOn) => `This project (${name}): ${isOn === null ? 'follows the machine' : isOn ? 'on' : 'off'}`,
     on: 'On',
     off: 'Off',
-    follow: 'Follow the machine',
     mainFlow: 'Main Flow',
     missing: skills => `Missing skills: ${skills.join(', ')}`,
     install: 'Install them from a terminal, then reload plugins:',
@@ -252,17 +224,12 @@ const TH: Words = {
   commandDescription: 'open-effort: เปิด pane พิมพ์ "on" หรือ "off" เพื่อเปิดหรือปิดในโปรเจกต์นี้',
   band: bandOf(TH_PHRASES),
   reason: reasonOf(TH_PHRASES),
-  flow: { why: 'เหตุผล', start: 'เริ่ม', now: 'ตอนนี้', steady: 'คงที่', climbed: 'ไต่ขึ้น', own: 'session' },
   steps: {
     read: 'Haiku อ่านแล้ว',
     effort: 'Effort',
-    checks: 'Check',
-    model: 'โมเดล',
     noScore: 'ไม่มีคะแนน',
+    own: 'session',
     stage: 'Main Flow',
-    watching: 'กำลังดู',
-    failing: n => `ไม่ผ่าน ${n}/${FAILS_TO_STALL}`,
-    raised: 'ไต่ขึ้นแล้ว',
     atEnd: 'จะถามคุณ',
     climbed: 'ไต่ขึ้น',
     failed: 'check ไม่ผ่าน',
@@ -272,22 +239,17 @@ const TH: Words = {
     agents: 'Sub-agent',
     agentsAt: n => `${n} ตัวกำลังทำ`,
     viewDenied: reason => `เปิด agent ไม่ได้: ${reason}`,
-    none: 'ไม่มี',
+    viewUnavailable: 'แอปนี้เปิด agent จากแถบนี้ไม่ได้ ให้เปิดจากรายการ task ของแอปแทน',
   },
   status: isOn => (isOn ? 'เปิดอยู่ในโปรเจกต์นี้' : 'ปิดอยู่ในโปรเจกต์นี้: จะไม่เปลี่ยนอะไรจนกว่าคุณจะพิมพ์ /open-effort on'),
   onlyPerson: 'เปิดหรือปิดได้เฉพาะผู้ใช้ โดยพิมพ์ /open-effort on หรือ off',
   pane: {
     switches: 'สวิตช์',
-    thisMachine: 'เครื่องนี้',
     useHere: name => `ใช้ในโปรเจกต์นี้ · ${name}`,
     advanced: 'ขั้นสูง · เครื่องนี้',
     defaults: 'ค่าเริ่มต้นของโปรเจกต์ที่คุณยังไม่ได้ตั้งเอง',
-    thisProject: name => `โปรเจกต์นี้ · ${name}`,
-    machine: isOn => `เครื่องนี้: ${isOn ? 'เปิด' : 'ปิด'}`,
-    project: (name, isOn) => `โปรเจกต์นี้ (${name}): ${isOn === null ? 'ตามเครื่อง' : isOn ? 'เปิด' : 'ปิด'}`,
     on: 'เปิด',
     off: 'ปิด',
-    follow: 'ตามเครื่อง',
     mainFlow: 'Main Flow',
     missing: skills => `ยังไม่มี skill: ${skills.join(', ')}`,
     install: 'ติดตั้งจาก terminal แล้ว reload plugins:',

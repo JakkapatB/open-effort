@@ -1,11 +1,11 @@
 import { expect, test } from 'claude-code/testing'
-import type { EngineInterface } from 'claude-code'
+import type { Engine } from 'claude-code/testing'
 
-import { BAND, PANE, bandText, engine, fail, finish, paneText, pressPane, request, start, type } from './engine'
+import { BAND, PANE, PRESENTATION, bandText, engine, fail, finish, paneText, pressPane, request, start, type } from './engine'
 
 const GOAL = 'clarity=goal hard=no risky=no size=small'
 
-async function pressBand($: EngineInterface, key: string) {
+async function pressBand($: Engine, key: string) {
   const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
   await ui.press({ key })
   await ui.unmount()
@@ -14,7 +14,7 @@ async function pressBand($: EngineInterface, key: string) {
 test('/open-effort opens the pane', async ($, on) => {
   const { opened } = engine(on)
   await start($)
-  await $.command.run({ command: 'open-effort', args: '', origin: { kind: 'composer' } })
+  await $.command.run({ command: 'open-effort', args: '', origin: { kind: 'composer' }, presentation: PRESENTATION })
 
   expect(opened).toEqual(['open-effort'])
 })

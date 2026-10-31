@@ -1,23 +1,24 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, PromptOrigin, Register } from 'claude-code'
+import type { EngineInterface, PromptOrigin, Register, RenderChildren } from 'claude-code'
 
-import type { FlowModel } from './policy'
 import type { Effort, HistoryEntry, Language, LanguageChoice, ModelTier, Project, Stage, SubAgent, Switches, Task, TicketSetting, TurnLog } from '../types'
 import { checkRun } from './checks'
+import { THEMES, THEME_IDS, agentsSvg, bandKeys, historySvg, isThemeId, stageSvg, stepsSvg, useTheme } from './diagrams'
+import type { Loop, Step, ThemeId } from './diagrams'
 import { EMPTY_TURN, appended, entryOf, historyFrom, historyKey, projectKey, projectOf } from './history'
 import {
-  ASK_NOTE, IMPLEMENT_NOTE, INSTALL_COMMANDS, MODEL_TOOL_SPEC, TICKET_NOTE, STAGES, STAGE_TOOL_SPEC, modelNote, missingSkills, routeOf, stageOfPath, stageOfSkill, startsFlow,
+  ASK_NOTE, IMPLEMENT_NOTE, INSTALL_COMMANDS, MODEL_TOOL_SPEC, STAGES, STAGE_TOOL_SPEC, TICKET_NOTE, missingSkills, modelNote, routeOf, stageOfPath, stageOfSkill,
+  startsFlow,
 } from './main-flow'
 import {
-  EFFORTS, FABLE_MODEL, FAILS_TO_STALL, FLOW_MODELS, FRESH_TASK, TIER_MODEL, flowModelFor, isFlowModel, afterTicketAgentCheck, enteredTicket, fitEffort, modelUp, taskModel, ticketIn, ticketOf, ticketSettingOf, tierOf, afterAgentCheck, afterCheck, enteredStage, isBuiltInAgent, isEffort, isFable, rungOf, startingEffort,
-  subAgentStart,
+  EFFORTS, FABLE_MODEL, FAILS_TO_STALL, FLOW_MODELS, FRESH_TASK, TIER_MODEL, afterAgentCheck, afterCheck, afterTicketAgentCheck, enteredStage, enteredTicket,
+  fitEffort, flowModelFor, isBuiltInAgent, isEffort, isFable, isFlowModel, modelUp, rungOf, startingEffort, subAgentStart, taskModel, ticketIn, ticketOf,
+  ticketSettingOf, tierOf,
 } from './policy'
+import type { FlowModel } from './policy'
 import { SCORE_GRACE_MS, isGoOn, isUnsure, scoreRequest } from './score'
 import type { Scored } from './score'
 import { clockTime, languageOf, modelName, wordsFor } from './words'
-import { THEMES, THEME_IDS, agentsSvg, bandKeys, historySvg, isThemeId, stageSvg, stepsSvg, useTheme } from './diagrams'
-import type { ThemeId } from './diagrams'
-import type { Loop, Step } from './diagrams'
 import type { Why } from './words'
 
 const isOn = atom({ plugin: 'open-effort', key: 'isOn' } as const, true)
@@ -46,6 +47,8 @@ const agents = atom({ plugin: 'open-effort', key: 'agents' } as const, {} as Rec
 const handed = atom({ plugin: 'open-effort', key: 'handed' } as const, {} as Record<string, { ticket: string } & TicketSetting>)
 // Counts new tasks, so a late score applies only to the task it was asked for.
 const scoring = atom({ plugin: 'open-effort', key: 'scoring' } as const, 0)
+// Whether the surface can put an agent's transcript in view; false once it said it draws no main view.
+const canView = atom({ plugin: 'open-effort', key: 'canView' } as const, true)
 
 /** Sub-agents kept: the latest ones, enough for any session's running agents. */
 const AGENTS_KEPT = 50
@@ -138,9 +141,9 @@ async function setLanguage($: EngineInterface, choice: LanguageChoice): Promise<
 }
 
 /**
- * A Main Flow stage was started: the task takes the stage's effort. Claude moves a task only once it is in the flow, or the mod sent it there or asked the
- * person; the person's own stage command (`isFlowStart`) may start the flow. Nothing moves while the mod or the
- * Main Flow is off.
+ * A Main Flow stage was started: the task takes the stage's effort. Claude moves a task only once it is in the flow,
+ * or after the mod asked the person about it; the person's own stage command (`isFlowStart`) may start the flow.
+ * Nothing moves while the mod or the Main Flow is off.
  */
 async function moveToStage($: EngineInterface, stage: Stage, isFlowStart = false): Promise<true | 'off' | 'not-invited'> {
   if (!(await read($, isOn)) || !(await isFlowAvailable($))) return 'off'
@@ -405,9 +408,9 @@ export const register: Register = on => {
   }).catch(($, e, next) => next(e))
 
   // A new request the person typed ends the task under way and starts another: Haiku scores it, and the score gives
-  // its starting effort. Large implementation work goes into
-  // the Main Flow and borderline work asks first, when the flow is available. A go-on reply, a slash command or a
-  // row the person did not type keeps the task under way.
+  // its starting effort. Large or borderline work asks the person about the Main Flow first, when the flow is
+  // available. A go-on reply, a reply to what Claude said, a slash command or a row the person did not type keeps the
+  // task under way.
   on('prompt.submit', async ($, e, next) => {
     // The session moved to another project (a host's directory change): its switches and history come with it.
     if ((await read($, project))?.root !== (await $.session.root())) await loadProject($)
@@ -429,7 +432,7 @@ export const register: Register = on => {
     const said = under.score !== null || under.effort !== null ? await lastSaid($) : ''
     await update($, seenLast, last => ({ ...last, haikuCalls: (last.haikuCalls ?? 0) + 1 }))
     const scored = scoreRequest($, e.text, said || undefined)
-    const early = await Promise.race([scored, new Promise<null>(resolve => setTimeout(() => resolve(null), SCORE_GRACE_MS))])
+    const early = await Promise.race([scored, $.clock.sleep(SCORE_GRACE_MS).then(() => null)])
     if (early) {
       const notes = await applyScore($, early, generation)
       return notes.length > 0 ? next({ ...e, context: [...(e.context ?? []), ...notes] }) : next(e)
@@ -449,9 +452,9 @@ export const register: Register = on => {
     return next(e)
   }).catch(($, e, next) => next(e))
 
-  // Each main-session request goes out at the rung the task stands on: its effort, and Fable 5.1 once it climbed
-  // there; otherwise the session's model (ADR 0001). The session's own effort and model are kept for the band, and
-  // what went out for the turn's history entry.
+  // Each main-session request goes out at the rung the task stands on: its effort, on the task's model (the session's
+  // unless the person took a model offer or the Main Flow moved it), and Fable 5.1 once it climbed there. The
+  // session's own effort and model are kept for the band, and what went out for the turn's history entry.
   on('turn.step', async function* ($, e, next) {
     let sent = e
     if (e.agentId === undefined) {
@@ -474,7 +477,6 @@ export const register: Register = on => {
           // The task's model: the one the person chose for it, or Fable 5.1 once it climbed there.
           const model = rung?.isFable ? (isFable(runsOn) ? runsOn : FABLE_MODEL) : runsOn
           if (rung) sent = { ...e, effort: rung.effort, ...(model !== e.model ? { model } : {}) }
-
         }
       } catch {
         // The request goes out as it came.
@@ -509,23 +511,26 @@ export const register: Register = on => {
   // A sub-agent of a built-in type starts at its rule's model and effort, unless the call names its own.
   on('tool.call', { tool: 'Agent' }, async ($, e, next) => {
     if (e.model !== undefined || e.effort !== undefined || !(await read($, isOn))) return next(e)
-    // A ticket handed to a sub-agent in the implement stage: it runs on the ticket's model and effort.
-    const path = ticketIn(e.prompt)
-    const number = path ? ticketOf(path) : null
-    if (path && number && (await read($, task)).stage === 'implement') {
-      const setting = await ticketSetting($, path)
-      if (setting) {
-        await update($, handed, all => ({ ...all, [e.description]: { ticket: number, ...setting } }))
-        return next({ ...e, effort: setting.effort, ...(setting.tier ? { model: setting.tier } : {}) })
-      }
-    }
     const t = await read($, task)
     const own = await read($, sessionModel)
     const runsOn = taskModel(t, own)
     const main = rungOf(t, await read($, sessionEffort), runsOn)
     // The task's model, Fable 5.1 once it climbed there; named only when it is not the session's.
     const tier = tierOf(main?.isFable ? FABLE_MODEL : runsOn)
-    const start = subAgentStart(e.subagent_type, main?.effort ?? null, tier !== tierOf(own) ? tier : null)
+    const taskTier = tier !== tierOf(own) ? tier : null
+    // A ticket handed to a sub-agent in the implement stage: it runs on the ticket's model and effort, on the task's
+    // model when the ticket names none.
+    const path = ticketIn(e.prompt)
+    const number = path ? ticketOf(path) : null
+    if (path && number && t.stage === 'implement') {
+      const setting = await ticketSetting($, path)
+      if (setting) {
+        await update($, handed, all => ({ ...all, [e.description]: { ticket: number, ...setting } }))
+        const model = setting.tier ?? taskTier
+        return next({ ...e, effort: setting.effort, ...(model ? { model } : {}) })
+      }
+    }
+    const start = subAgentStart(e.subagent_type, main?.effort ?? null, taskTier)
     return next(start ? { ...e, ...start } : e)
   }).catch(($, e, next) => next(e))
 
@@ -555,7 +560,6 @@ export const register: Register = on => {
     return ran
   }).catch(($, e, next) => next(e))
 
-  // The main session's turn ended: its entry joins the project's history, kept in the store.
   // A sub-agent's loop starts and ends: the band counts those at work.
   on('turn.start', async ($, e, next) => {
     const res = await next(e)
@@ -568,6 +572,7 @@ export const register: Register = on => {
     return res
   }).catch(($, e, next) => next(e))
 
+  // The main session's turn ended: its entry joins the project's history, kept in the store.
   on('turn.complete', async ($, e, next) => {
     const res = await next(e)
     const done = e.agentId
@@ -592,7 +597,7 @@ export const register: Register = on => {
     return res
   }).catch(($, e, next) => next(e))
 
-  // /open-effort opens the pane; /open-effort on|off switches the mod for this machine, a person's own command only.
+  // /open-effort opens the pane; /open-effort on|off switches the mod for this project, a person's own command only.
   on('command.run', { command: 'open-effort' }, async ($, e) => {
     const words = wordsFor(await read($, language))
     const arg = e.args.trim().toLowerCase()
@@ -605,7 +610,6 @@ export const register: Register = on => {
     }
     return { text: words.status(await read($, isOn)) }
   }).catch(() => ({ text: 'open-effort: the command failed; the switch is unchanged.' }))
-
 
   // The band: on surfaces that draw pictures, a compact flow (why, then the effort in effect, and in the Main Flow
   // the stage track above it) sized to the band's width; on the terminal, the words alone. Then the pane's button.
@@ -665,7 +669,7 @@ export const register: Register = on => {
       {
         title: `${words.steps.effort} · ${effortModel}`,
         ...(t.climbed && t.effort ? { aside: words.steps.from(t.effort) } : {}),
-        value: t.climbed?.effort ?? t.effort ?? rung?.effort ?? words.flow.own,
+        value: t.climbed?.effort ?? t.effort ?? rung?.effort ?? words.steps.own,
         state: t.isAtLadderEnd ? 'done' : loop?.tone === 'alert' ? 'alert' : onFable ? 'violet' : rung ? 'active' : 'idle',
         meter,
         rank: 3,
@@ -682,8 +686,8 @@ export const register: Register = on => {
     })
     const flow = stepsSvg(steps, room, e.props.isWorking, room)
     const stages = t.stage ? stageSvg(t.stage, room, { isTrackNew: isFresh('track'), isStageNew: isFresh(`stage:${t.stage}`) }) : null
-    // Sub-agents at work hang off the step at work as one node saying how many; their names follow as buttons that
-    // wrap to the band's width, each opening its agent's transcript.
+    // Sub-agents at work hang off the step at work as one node saying how many; their names follow, wrapping to the
+    // band's width: buttons that open each agent's transcript, or labels where the surface cannot open one.
     const ids = await read($, running)
     const atWork = ids.length > 0 ? (await $.agent.list()).filter(a => ids.includes(a.id)) : []
     const band = room + 64
@@ -695,10 +699,15 @@ export const register: Register = on => {
       const res = await $.ui.view({ agentId: id })
       // A refusal is said, not swallowed: the person pressed and should know why nothing opened.
       if ('deny' in res && res.deny) {
-        $.ui.toast(words.steps.viewDenied(res.deny))
-        await update($, seenLast, last => ({ ...last, view: res.deny }))
+        const reason = res.deny
+        // A surface with no main view (the desktop app) never will: the agents show as labels from then on.
+        const isNever = /main view/i.test(reason)
+        if (isNever) await update($, canView, () => false)
+        $.ui.toast(isNever ? words.steps.viewUnavailable : words.steps.viewDenied(reason))
+        await update($, seenLast, last => ({ ...last, view: reason }))
       }
     }
+    const isPressable = await read($, canView)
     return (
       <Box flexDirection="column" gap={1}>
         {stages && <Svg source={stages.source} width={stages.width} height={stages.height} alt={`Main Flow: ${t.stage}`} />}
@@ -710,13 +719,22 @@ export const register: Register = on => {
           {node && <Svg source={node.source} width={node.width} height={node.height} alt={words.steps.agentsAt(atWork.length)} />}
           {node && (
             <Box flexWrap="wrap" gap={1} marginTop={1}>
-              {atWork.map(a => (
-                <Button key={`agent-${a.id}`} onPress={() => openAgent(a.id)}>
-                  <Text color={THEMES[picked].accent}>{'⑂ '}</Text>
-                  <Text bold>{cut(a.type, 24)}</Text>
-                  <Text dimColor>{` · ${cut(a.description, 32)}`}</Text>
-                </Button>
-              ))}
+              {atWork.map(a => {
+                const label = [
+                  <Text key="mark" color={THEMES[picked].accent}>{'⑂ '}</Text>,
+                  <Text key="type" bold>{cut(a.type, 24)}</Text>,
+                  <Text key="what" dimColor>{` · ${cut(a.description, 32)}`}</Text>,
+                ]
+                return isPressable ? (
+                  <Button key={`agent-${a.id}`} onPress={() => openAgent(a.id)}>
+                    {label}
+                  </Button>
+                ) : (
+                  <Box key={`agent-${a.id}`} borderStyle="round" borderDimColor paddingX={1}>
+                    {label}
+                  </Box>
+                )
+              })}
             </Box>
           )}
         </Box>
@@ -741,7 +759,7 @@ export const register: Register = on => {
     useTheme(picked)
     const ACCENT = THEMES[picked].accent
 
-    const section = (title: string, ...rows: unknown[]) => (
+    const section = (title: string, ...rows: RenderChildren[]) => (
       <Box flexDirection="column" marginTop={1}>
         <Box paddingX={1}>
           <Text dimColor bold>
@@ -753,7 +771,7 @@ export const register: Register = on => {
         </Box>
       </Box>
     )
-    const row = (label: string, control: unknown) => (
+    const row = (label: string, control: RenderChildren) => (
       <Box justifyContent="space-between" alignItems="center" gap={1}>
         <Text>{label}</Text>
         {control}
@@ -772,10 +790,14 @@ export const register: Register = on => {
         ))}
       </Box>
     )
-    const chart = e.surface !== 'terminal' && 'Svg' in table && list.length > 0 ? historySvg(list, Math.max(120, e.props.bodyColumns * 8 - 40), {
+    const Svg = e.surface !== 'terminal' && 'Svg' in table ? table.Svg : null
+    const chart =
+      Svg && list.length > 0
+        ? historySvg(list, Math.max(120, e.props.bodyColumns * 8 - 40), {
             ...words.chart,
             tooltip: entry => `${clockTime(entry.at)} · ${words.entryTitle(entry)} · ${words.entry(entry)}`,
-          }) : null
+          })
+        : null
 
     return (
       <Box flexDirection="column">
@@ -803,7 +825,7 @@ export const register: Register = on => {
                   <Text color="#ef4444">{words.missing(lacking)}</Text>
                   <Text dimColor>{words.install}</Text>
                   {INSTALL_COMMANDS.map(c => (
-                    <Text>{c}</Text>
+                    <Text key={c}>{c}</Text>
                   ))}
                 </Box>,
               ]
@@ -831,14 +853,14 @@ export const register: Register = on => {
         {section(
           words.history(list.length),
           ...(list.length > 0 ? [<Text dimColor>{words.summary(list)}</Text>] : []),
-          ...(chart ? [<table.Svg source={chart.source} width={chart.width} height={chart.height} alt={words.history(list.length)} isInteractive />] : []),
+          ...(chart && Svg ? [<Svg source={chart.source} width={chart.width} height={chart.height} alt={words.history(list.length)} isInteractive />] : []),
           ...(list.length === 0 ? [<Text dimColor>{words.noHistory}</Text>] : []),
           // The terminal draws no chart: its last few turns as lines instead.
           ...(!chart
             ? list
                 .slice(-5)
                 .reverse()
-                .map(entry => <Text dimColor>{`${clockTime(entry.at)} · ${words.entryTitle(entry)} · ${words.entry(entry)}`}</Text>)
+                .map(entry => <Text key={String(entry.at)} dimColor>{`${clockTime(entry.at)} · ${words.entryTitle(entry)} · ${words.entry(entry)}`}</Text>)
             : []),
         )}
         {section(

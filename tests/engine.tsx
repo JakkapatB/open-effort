@@ -1,4 +1,13 @@
-import type { EngineInterface, ModelCompleteInput, ModelCompleteResult, On, PromptSubmitInput, TurnStepInput } from 'claude-code'
+import type { Engine } from 'claude-code/testing'
+import type { CommandPresentation, ModelCompleteInput, ModelCompleteResult, On, PromptSubmitInput, TurnStepInput } from 'claude-code'
+
+// The test runtime has timers; the mod's own type settings leave them out.
+declare global {
+  function setTimeout(callback: (value?: unknown) => void, ms?: number): unknown
+}
+
+/** How a typed command is shown: on the main screen, in a terminal 100 columns wide. */
+export const PRESENTATION: CommandPresentation = { isFullscreen: false, columns: 100 }
 
 export const BAND = {
   plugin: 'open-effort',
@@ -57,6 +66,8 @@ export type EngineOptions = {
   root?: string
   /** Files the mod may read, by path, as `$.fs.read` finds them. */
   files?: Record<string, string>
+  /** Why the surface will not put an agent's transcript in view (the desktop app draws no main view); default it does. */
+  viewDeny?: string
 }
 
 /**
@@ -73,6 +84,11 @@ export function engine(on: On, options: EngineOptions = {}) {
   // The clock stands still until a test moves it: 31 October 2026, 07:00 UTC.
   const clock = { now: Date.UTC(2026, 9, 31, 7, 0) }
   on('clock.now', () => ({ value: clock.now }))
+  // A wait takes real time, as it does in the app: a score that comes within the prompt's grace still goes with it.
+  on('clock.sleep', async (_, e) => {
+    await new Promise(resolve => setTimeout(resolve, e.ms))
+    return { value: undefined }
+  })
 
   on('session.start', (_, e) => {
     where.cwd = e.cwd
@@ -88,7 +104,7 @@ export function engine(on: On, options: EngineOptions = {}) {
     opened.push(e.id)
     return { value: { isPlaced: true } }
   })
-  on('ui.panes', () => ({ value: [...new Set(opened)].map(id => ({ id, title: id, isShown: true, isFocused: false })) }))
+  on('ui.panes', () => ({ value: [...new Set(opened)].map(id => ({ id, title: id, isShown: true, isFocused: false, isPlaced: true })) }))
   on('ui.close', (_, e) => {
     opened.splice(0, opened.length, ...opened.filter(id => id !== e.id))
     return { value: undefined }
@@ -98,7 +114,7 @@ export function engine(on: On, options: EngineOptions = {}) {
   const viewed: string[] = []
   on('ui.view', (_, e) => {
     viewed.push((e as { agentId?: string }).agentId ?? '')
-    return { value: {} }
+    return { value: options.viewDeny ? { deny: options.viewDeny } : {} }
   })
   // The store, in memory, seeded as the test says; every value the mod writes is also kept as text.
   const store = new Map<string, unknown>(Object.entries(options.store ?? {}))
@@ -148,8 +164,8 @@ export function engine(on: On, options: EngineOptions = {}) {
     if (options.haikuDelayMs) await new Promise(resolve => setTimeout(resolve, options.haikuDelayMs))
     const haiku = replies[Math.min(asked.length, replies.length) - 1]
     if (haiku === 'timeout') return { value: { isAnswered: false, reason: 'aborted', usage: USAGE } }
-    if (haiku === 'fail') return { value: { isAnswered: false, reason: 'api-error', status: 529, error: 'overloaded_error', usage: USAGE } }
-    return { value: { isAnswered: true, text: haiku, usage: USAGE } }
+    if (haiku === 'fail') return { value: { isAnswered: false, reason: 'api-error', status: 529, error: 'overloaded', usage: USAGE } }
+    return { value: { isAnswered: true, text: haiku ?? '', usage: USAGE } }
   })
   on('ui.render', ($, e) => {
     const { Text } = $.ui.resolve(e)
@@ -172,12 +188,12 @@ export function engine(on: On, options: EngineOptions = {}) {
 export const DAY_MS = 24 * 60 * 60 * 1000
 
 /** The main session's turn ends with an answer. */
-export async function finish($: EngineInterface) {
+export async function finish($: Engine) {
   await $.turn.complete({ turnId: 't1', answer: 'done', durationMs: 1000, isAborted: false, reason: 'answer' })
 }
 
 /** Every text the pane draws, joined by lines. */
-export async function paneText($: EngineInterface, surface: (typeof SURFACES)[number] = 'desktop') {
+export async function paneText($: Engine, surface: (typeof SURFACES)[number] = 'desktop') {
   const ui = await $.ui.mount({ ...PANE, surface })
   const texts: string[] = []
   const walk = (node: unknown): void => {
@@ -197,34 +213,34 @@ export async function paneText($: EngineInterface, surface: (typeof SURFACES)[nu
 }
 
 /** The person presses a Button in the pane. */
-export async function pressPane($: EngineInterface, key: string) {
+export async function pressPane($: Engine, key: string) {
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   await ui.press({ key })
   await ui.unmount()
 }
 
 /** Claude runs a command in Bash, which passes or fails as told; `agentId` runs it in a sub-agent. */
-export async function run($: EngineInterface, bash: { passes: boolean }, command: string, passes: boolean, agentId?: string) {
+export async function run($: Engine, bash: { passes: boolean }, command: string, passes: boolean, agentId?: string) {
   bash.passes = passes
   await $.tool.call({ tool: 'Bash', command, ...(agentId ? { agentId } : {}) })
 }
 
 /** The same check failing `times` times in a row. */
-export async function fail($: EngineInterface, bash: { passes: boolean }, times = 3, command = 'npm test') {
+export async function fail($: Engine, bash: { passes: boolean }, times = 3, command = 'npm test') {
   for (let i = 0; i < times; i++) await run($, bash, command, false)
 }
 
-export async function start($: EngineInterface) {
+export async function start($: Engine) {
   await $.session.start({ cwd: '/work/app', surface: 'desktop', isInteractive: true })
 }
 
 /** The person types a prompt and presses Enter. */
-export async function type($: EngineInterface, text: string) {
+export async function type($: Engine, text: string) {
   await $.prompt.submit({ text, wait: false, origin: { kind: 'composer' } })
 }
 
 /** One model request of a sub-agent's loop, carrying the effort its Agent call set. */
-export async function agentRequest($: EngineInterface, agentId: string, effort: NonNullable<TurnStepInput['effort']>, index = 0) {
+export async function agentRequest($: Engine, agentId: string, effort: NonNullable<TurnStepInput['effort']>, index = 0) {
   const stream = $.turn.step({ turnId: `t-${agentId}`, index, model: 'claude-opus-5-5', effort, messageCount: 1, agentId })
   for await (const _ of stream) {
     // the chunks are not what these tests look at
@@ -233,7 +249,7 @@ export async function agentRequest($: EngineInterface, agentId: string, effort: 
 }
 
 /** One model request of the main session, carrying the session's own effort (`'none'` for a model that takes none). */
-export async function request($: EngineInterface, effort: NonNullable<TurnStepInput['effort']> | 'none' = 'high', index = 0, model = 'claude-opus-5-5') {
+export async function request($: Engine, effort: NonNullable<TurnStepInput['effort']> | 'none' = 'high', index = 0, model = 'claude-opus-5-5') {
   const stream = $.turn.step({ turnId: 't1', index, model, effort: effort === 'none' ? undefined : effort, messageCount: 1 })
   for await (const _ of stream) {
     // the chunks are not what these tests look at
@@ -242,7 +258,7 @@ export async function request($: EngineInterface, effort: NonNullable<TurnStepIn
 }
 
 /** The band's text, as drawn on a surface. */
-export async function bandText($: EngineInterface, surface: (typeof SURFACES)[number] = 'desktop') {
+export async function bandText($: Engine, surface: (typeof SURFACES)[number] = 'desktop') {
   const ui = await $.ui.mount({ ...BAND, surface })
   // The terminal writes the band's line; a surface that draws pictures carries it as the diagram's alt.
   const text = await ui.find({ type: 'Text', text: /open-effort/ })
