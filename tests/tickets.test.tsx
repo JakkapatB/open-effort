@@ -2,7 +2,7 @@ import type { TurnStepInput } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
-import { MATT_SKILLS, engine, request, run, start, type } from './engine'
+import { MATT_SKILLS, engine, request, run, spawn, start, type } from './engine'
 
 const LARGE = 'clarity=unclear hard=no risky=no size=large sure=90'
 const T3 = 'work/coupons/issues/03-coupon-rules.md'
@@ -87,7 +87,8 @@ test('a sub-agent handed a ticket runs on the ticket’s model and effort', asyn
 test('a ticket’s sub-agent climbs its effort to xhigh, then a model up', async ($, on) => {
   const { sent, bash } = engine(on, { haiku: LARGE, matt: MATT_SKILLS, files: FILES })
   await implementing($)
-  await $.tool.call({ tool: 'Agent', description: 'ticket 03', prompt: `Implement ${T3} with TDD.` } as never)
+  await $.tool.call({ tool: 'Agent', tool_use_id: 'tu-3', description: 'ticket 03', prompt: `Implement ${T3} with TDD.` } as never)
+  await spawn($, 'tu-3', 'ticket 03', `Implement ${T3} with TDD.`)
   await $.turn.start({ text: 'work', turnId: 't-t3', agentId: 't3' })
   let index = 0
   await agentStep($, 't3', 'claude-sonnet-5-5', 'high', index++)
@@ -143,4 +144,27 @@ test('a ticket that names only its model keeps that model, and Haiku reads its e
 
   const agentCall = calls.find(c => c.tool === 'Agent')
   expect([agentCall?.model, agentCall?.effort]).toEqual(['opus', 'low'])
+})
+
+test('two hand-offs under one description each keep their own ticket', async ($, on) => {
+  const { sent, bash } = engine(on, { haiku: LARGE, matt: MATT_SKILLS, files: FILES })
+  await implementing($)
+  // Both calls are made before either agent starts: matched by description, the second would take the first's place.
+  await $.tool.call({ tool: 'Agent', tool_use_id: 'tu-a', description: 'implement ticket', prompt: `Implement ${T3}.` } as never)
+  await $.tool.call({ tool: 'Agent', tool_use_id: 'tu-b', description: 'implement ticket', prompt: `Implement ${T4}.` } as never)
+  const a = await spawn($, 'tu-a', 'implement ticket', `Implement ${T3}.`)
+  const b = await spawn($, 'tu-b', 'implement ticket', `Implement ${T4}.`)
+  expect(a).not.toBe(b)
+  if (!a || !b) return
+  // Each climbs from its own ticket's effort: ticket 03 from high, ticket 04 from low.
+  for (const id of [a, b]) {
+    await agentStep($, id, 'claude-opus-5-5', id === a ? 'high' : 'low', 0)
+    await run($, bash, 'npm test', false, id)
+    await run($, bash, 'npm test', false, id)
+    await run($, bash, 'npm test', false, id)
+    await agentStep($, id, 'claude-opus-5-5', id === a ? 'high' : 'low', 1)
+  }
+
+  expect(sent.filter(e => e.agentId === a).map(e => e.effort)).toEqual(['high', 'xhigh'])
+  expect(sent.filter(e => e.agentId === b).map(e => e.effort)).toEqual(['low', 'medium'])
 })

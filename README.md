@@ -108,7 +108,7 @@ A general-purpose sub-agent's effort follows the stage it runs in: the code-revi
 | `medium` | A known goal whose way needs thought; the lowest for risky work or when Haiku is unsure; the tickets and retro stages |
 | `high` | The plan is not clear yet; the grill, spec and implement stages; Plan sub-agents; the first step on Fable 5.1 |
 | `xhigh` | Unusually hard work; the review stage; the highest a sub-agent climbs to (one working a ticket then moves a model up) |
-| `max` | On Fable 5.1, after `high` and `xhigh` there still fail; or when you set your session to `max` yourself. The mod never picks it at the start |
+| `max` | On Fable 5.1, after `high` and `xhigh` there still fail; for a sub-agent on a model with no `xhigh` (Opus or Sonnet 4.6), in its place; or when you set your session to `max` yourself. The mod never picks it at the start |
 
 Three failing checks in a row raise the effort one level; a passing check brings it back to where the task started. A ticket's `Effort:` overrides the stage's effort for that ticket.
 

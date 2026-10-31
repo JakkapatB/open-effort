@@ -74,12 +74,6 @@ export function fitEffort(effort: Effort, model: string | null): Effort {
   return [...takes].reverse().find(e => EFFORTS.indexOf(e) < at) ?? takes[0] ?? effort
 }
 
-/** An effort moved `by` notches, held between low and max. */
-export function notch(effort: Effort, by: number): Effort {
-  const at = Math.min(Math.max(EFFORTS.indexOf(effort) + by, 0), EFFORTS.length - 1)
-  return EFFORTS[at] ?? effort
-}
-
 /** A task's starting effort from its score: by clarity, xhigh when unusually hard, never below medium when risky; never max. */
 export function startingEffort(score: Score): Effort {
   const effort = score.isHard ? 'xhigh' : CLARITY_EFFORT[score.clarity]
@@ -198,8 +192,13 @@ export function afterCheck(
   return { task: { ...task, effort, climbed: above, fails: 0, isOnFable: task.isOnFable || above.isFable }, hasClimbed: true, hasReachedLadderEnd: false }
 }
 
-/** How high a sub-agent's own stalls climb its effort; its model never changes. */
+/** How high a sub-agent's own stalls climb its effort (max on a model without it); its model never changes. */
 const SUB_AGENT_TOP: Effort = 'xhigh'
+
+/** The next effort above `here`, up to `top`, that `model` takes; null when there is none. */
+function effortAbove(here: Effort, top: Effort, model: string | null): Effort | null {
+  return supportedEfforts(model).find(e => EFFORTS.indexOf(e) > EFFORTS.indexOf(here) && EFFORTS.indexOf(e) <= EFFORTS.indexOf(top)) ?? null
+}
 
 /**
  * What a sub-agent of a built-in type starts with: Explore on Haiku at low, Plan at high and general-purpose (the
@@ -220,15 +219,19 @@ export function isBuiltInAgent(type: string | undefined): boolean {
   return type === 'Explore' || type === 'Plan' || type === 'general-purpose'
 }
 
-/** A check a sub-agent ran: a pass clears the count; the third failure in a row climbs its effort a notch, up to xhigh. */
-export function afterAgentCheck(agent: SubAgent, passed: boolean): SubAgent {
+/**
+ * A check a sub-agent ran: a pass clears the count; the third failure in a row climbs its effort to the next one that
+ * `model`, the one it runs on, takes, up to xhigh. A model that takes max but no xhigh (Opus and Sonnet 4.6) climbs
+ * from high to max in its place, since the sub-agent's model never changes; with neither, it stays.
+ */
+export function afterAgentCheck(agent: SubAgent, passed: boolean, model: string | null): SubAgent {
   if (passed) return { ...agent, fails: 0 }
   const fails = agent.fails + 1
   if (fails < FAILS_TO_STALL) return { ...agent, fails }
   const here = agent.climbed ?? agent.effort ?? 'medium'
-  const top = EFFORTS.indexOf(SUB_AGENT_TOP)
-  const climbed = EFFORTS.indexOf(here) < top ? notch(here, 1) : agent.climbed
-  return { ...agent, climbed, fails: 0 }
+  const takes = supportedEfforts(model)
+  const top = !takes.includes(SUB_AGENT_TOP) && takes.includes('max') ? 'max' : SUB_AGENT_TOP
+  return { ...agent, climbed: effortAbove(here, top, model) ?? agent.climbed, fails: 0 }
 }
 
 /** A ticket file as /to-tickets names one: `<feature>/issues/03-coupon-rules.md`; its number is `03`. */
@@ -287,8 +290,7 @@ export function afterTicketAgentCheck(agent: SubAgent, passed: boolean, startTie
   if (fails < FAILS_TO_STALL) return { ...agent, fails }
   const tier = agent.tier ?? startTier
   const here = agent.climbed ?? agent.effort ?? 'medium'
-  const top = tier === 'fable' ? 'max' : 'xhigh'
-  const next = supportedEfforts(TIER_MODEL[tier]).find(e => EFFORTS.indexOf(e) > EFFORTS.indexOf(here) && EFFORTS.indexOf(e) <= EFFORTS.indexOf(top))
+  const next = effortAbove(here, tier === 'fable' ? 'max' : 'xhigh', TIER_MODEL[tier])
   if (next) return { ...agent, tier, climbed: next, fails: 0 }
   const up = TIERS[TIERS.indexOf(tier) + 1]
   return up ? { ...agent, tier: up, climbed: 'high', fails: 0 } : { ...agent, fails: 0 }

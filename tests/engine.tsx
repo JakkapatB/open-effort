@@ -70,6 +70,14 @@ export type EngineOptions = {
   viewDeny?: string
 }
 
+/** The sub-agents running: a1 and a2 of a built-in type, c1 of the person's own, t3 working ticket 03. */
+const AGENTS = [
+  { id: 'a1', type: 'general-purpose', description: 'look around', status: 'running' as const },
+  { id: 'a2', type: 'Explore', description: 'search', status: 'running' as const },
+  { id: 'c1', type: 'code-reviewer', description: 'review', status: 'running' as const },
+  { id: 't3', type: 'general-purpose', description: 'ticket 03', status: 'running' as const },
+]
+
 /**
  * The engine beneath the mod: a session, its settings, a Haiku that answers scores as told, a model that answers
  * every request, and the engine's own band. What the mod sent each way is kept for the test to read.
@@ -138,15 +146,7 @@ export function engine(on: On, options: EngineOptions = {}) {
   })
   on('command.register', () => ({ value: { command: 'open-effort' } }))
   on('tool.register', (_, e) => ({ value: { tool: `mcp__open-effort__${e.name}` } }))
-  // The sub-agents running: a1 and a2 of a built-in type, c1 of the person's own.
-  on('agent.list', () => ({
-    value: [
-      { id: 'a1', type: 'general-purpose', description: 'look around', status: 'running' as const },
-      { id: 'a2', type: 'Explore', description: 'search', status: 'running' as const },
-      { id: 'c1', type: 'code-reviewer', description: 'review', status: 'running' as const },
-      { id: 't3', type: 'general-purpose', description: 'ticket 03', status: 'running' as const },
-    ],
-  }))
+  on('agent.list', () => ({ value: [...AGENTS] }))
   on('command.list', () => ({
     value: [
       { name: 'code-review', description: "Claude Code's own review", source: 'builtin' as const },
@@ -178,11 +178,19 @@ export function engine(on: On, options: EngineOptions = {}) {
   // Bash runs as told: `bash.passes` decides whether the next command exits 0.
   const bash = { passes: true }
   const calls: Record<string, unknown>[] = []
+  // An agent starts through agent.spawn, as the Agent tool starts one: its id is the one the list gives its
+  // description, else a fresh one.
+  const spawned: Record<string, unknown>[] = []
+  on('agent.spawn', (_, e) => {
+    spawned.push(e as Record<string, unknown>)
+    const listed = AGENTS.find(a => a.description === e.description)
+    return { model: e.model ?? e.parentModel, agentId: listed?.id ?? `agent-${spawned.length}` }
+  })
   on('tool.call', (_, e) => {
     calls.push(e as Record<string, unknown>)
     return bash.passes ? { result: {}, text: 'ok' } : { result: {}, text: 'Exit code 1', isError: true }
   })
-  return { sent, asked, submitted, bash, opened, written, clock, calls, viewed, where, store }
+  return { sent, asked, submitted, bash, opened, written, clock, calls, spawned, viewed, where, store }
 }
 
 export const DAY_MS = 24 * 60 * 60 * 1000
@@ -226,8 +234,8 @@ export async function run($: Engine, bash: { passes: boolean }, command: string,
 }
 
 /** The same check failing `times` times in a row. */
-export async function fail($: Engine, bash: { passes: boolean }, times = 3, command = 'npm test') {
-  for (let i = 0; i < times; i++) await run($, bash, command, false)
+export async function fail($: Engine, bash: { passes: boolean }, times = 3, command = 'npm test', agentId?: string) {
+  for (let i = 0; i < times; i++) await run($, bash, command, false, agentId)
 }
 
 export async function start($: Engine) {
@@ -240,8 +248,8 @@ export async function type($: Engine, text: string) {
 }
 
 /** One model request of a sub-agent's loop, carrying the effort its Agent call set. */
-export async function agentRequest($: Engine, agentId: string, effort: NonNullable<TurnStepInput['effort']>, index = 0) {
-  const stream = $.turn.step({ turnId: `t-${agentId}`, index, model: 'claude-opus-5-5', effort, messageCount: 1, agentId })
+export async function agentRequest($: Engine, agentId: string, effort: NonNullable<TurnStepInput['effort']>, index = 0, model = 'claude-opus-5-5') {
+  const stream = $.turn.step({ turnId: `t-${agentId}`, index, model, effort, messageCount: 1, agentId })
   for await (const _ of stream) {
     // the chunks are not what these tests look at
   }
@@ -274,4 +282,19 @@ export async function bandText($: Engine, surface: (typeof SURFACES)[number] = '
   walk(await ui.drawn())
   await ui.unmount()
   return text?.text ?? alts.find(alt => alt.includes('open-effort'))
+}
+
+/** The Agent tool starting the agent of the call `toolUseId`, as the engine raises it; its id comes back. */
+export async function spawn($: Engine, toolUseId: string, description: string, prompt: string) {
+  const res = await $.agent.spawn({
+    tool_use_id: toolUseId,
+    prompt,
+    description,
+    subagentType: 'general-purpose',
+    provider: { plugin: 'engine', tier: 'core' },
+    parentModel: 'claude-opus-5-5',
+    background: true,
+    fork: false,
+  })
+  return res.agentId
 }

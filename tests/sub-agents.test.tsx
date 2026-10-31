@@ -117,3 +117,16 @@ test('while the mod is off, sub-agents are left as they are', async ($, on) => {
 
   expect(await spawn($, calls, { subagent_type: 'Explore' })).toEqual({ model: undefined, effort: undefined })
 })
+
+test('a sub-agent on a model without xhigh climbs from high to max in its place', async ($, on) => {
+  const { sent, bash } = engine(on, { haiku: GOAL })
+  await start($)
+  await type($, 'add a coupon field')
+  await agentRequest($, 'a1', 'medium', 0, 'claude-opus-4-6')
+  for (let round = 1; round <= 2; round++) {
+    await fail($, bash, 3, 'npm test', 'a1')
+    await agentRequest($, 'a1', 'medium', round, 'claude-opus-4-6')
+  }
+
+  expect(sent.filter(e => e.agentId === 'a1').map(e => e.effort)).toEqual(['medium', 'high', 'max'])
+})

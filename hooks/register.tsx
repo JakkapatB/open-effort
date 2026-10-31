@@ -43,7 +43,7 @@ const seen = atom({ plugin: 'open-effort', key: 'seen' } as const, {} as Record<
 const running = atom({ plugin: 'open-effort', key: 'running' } as const, [] as string[])
 const seenLast = atom({ plugin: 'open-effort', key: 'seenLast' } as const, { score: 'none yet', effort: 'none yet', model: 'none yet', starts: 0 })
 const agents = atom({ plugin: 'open-effort', key: 'agents' } as const, {} as Record<string, SubAgent>)
-// Tickets handed to sub-agents not yet seen running, by the Agent call's description: the ticket and its setting.
+// Tickets handed to sub-agents not yet started, by the Agent call's tool_use_id: the ticket and its setting.
 const handed = atom({ plugin: 'open-effort', key: 'handed' } as const, {} as Record<string, { ticket: string } & TicketSetting>)
 // Counts new tasks, so a late score applies only to the task it was asked for.
 const scoring = atom({ plugin: 'open-effort', key: 'scoring' } as const, 0)
@@ -59,18 +59,20 @@ function keptAgents(all: Record<string, SubAgent>): Record<string, SubAgent> {
   return Object.fromEntries(Object.entries(all).slice(-AGENTS_KEPT))
 }
 
-/** A sub-agent as the mod knows it; the first time, its type is looked up to know whether it is one the mod climbs. */
+/**
+ * A sub-agent as the mod knows it; the first time, its type is looked up to know whether it is one the mod climbs. A
+ * ticket's sub-agent is known from its start (the `agent.spawn` hook).
+ */
 async function subAgent($: EngineInterface, id: string): Promise<SubAgent> {
   const known = (await read($, agents))[id]
   if (known) return known
   const listed = (await $.agent.list()).find(a => a.id === id)
-  // A sub-agent handed a ticket runs on the ticket's setting and climbs from it, whatever its type.
-  const ticket = listed ? (await read($, handed))[listed.description] : undefined
-  if (ticket) {
-    await update($, handed, all => Object.fromEntries(Object.entries(all).filter(([d]) => d !== listed?.description)))
-    return { effort: ticket.effort, climbed: null, fails: 0, isClimbable: true, ticket: ticket.ticket, ...(ticket.tier ? { tier: ticket.tier } : {}) }
-  }
   return { effort: null, climbed: null, fails: 0, isClimbable: isBuiltInAgent(listed?.type) }
+}
+
+/** Drops a hand-off once its agent started, or the call started none. */
+async function dropHanded($: EngineInterface, toolUseId: string): Promise<void> {
+  await update($, handed, all => Object.fromEntries(Object.entries(all).filter(([id]) => id !== toolUseId)))
 }
 
 // What outlives the session in the store: the machine's switches, the language picked, the last effort seen; and per
@@ -528,7 +530,8 @@ export const register: Register = on => {
           // A ticket's sub-agent whose climbs moved it up a family runs on that family's model from then on.
           const model = agent.tier && tierOf(e.model) !== agent.tier ? TIER_MODEL[agent.tier] : e.model
           if (agent.climbed) sent = { ...e, model, effort: fitEffort(agent.climbed, model) }
-          else await update($, agents, all => keptAgents({ ...all, [id]: { ...agent, effort: carried } }))
+          // What its requests carry, and on which model, so its climbs step through the efforts that model takes.
+          if (!agent.climbed || agent.model !== model) await update($, agents, all => keptAgents({ ...all, [id]: { ...agent, model, ...(agent.climbed ? {} : { effort: carried }) } }))
         }
       } catch {
         sent = e
@@ -561,16 +564,33 @@ export const register: Register = on => {
     if (path && number && t.stage === 'implement') {
       const setting = await ticketSetting($, path)
       if (setting) {
-        await update($, handed, all => ({ ...all, [e.description]: { ticket: number, ...setting } }))
+        // Kept by this call's id until its agent starts: two hand-offs alike never mix, whatever their descriptions.
+        const toolUseId = e.tool_use_id
+        await update($, handed, all => ({ ...all, [toolUseId]: { ticket: number, ...setting } }))
         const model = setting.tier ?? taskTier
         const ran = await next({ ...e, effort: setting.effort, ...(model ? { model } : {}) })
-        // A hand-off refused or failed starts no agent: its entry would wait for a later one of the same description.
-        if (ran.deny !== undefined || ran.isError === true) await update($, handed, all => Object.fromEntries(Object.entries(all).filter(([d]) => d !== e.description)))
+        // A call refused, or failed, leaves nothing behind; one that started its agent was taken up as it started.
+        if (ran.deny !== undefined || ran.isError === true) await dropHanded($, toolUseId)
         return ran
       }
     }
     const start = subAgentStart(e.subagent_type, main?.effort ?? null, taskTier)
     return next(start ? { ...e, ...start } : e)
+  }).catch(($, e, next) => next(e))
+
+  // A sub-agent started for a ticket handed to it: from its first request it runs on the ticket's setting and climbs
+  // from it, whatever its type. The spawn carries the Agent call's tool_use_id and answers the agent's own id.
+  on('agent.spawn', async ($, e, next) => {
+    const res = await next(e)
+    const ticket = (await read($, handed))[e.tool_use_id]
+    if (!ticket) return res
+    await dropHanded($, e.tool_use_id)
+    const id = res.agentId
+    if (id) {
+      const agent: SubAgent = { effort: ticket.effort, climbed: null, fails: 0, isClimbable: true, ticket: ticket.ticket, ...(ticket.tier ? { tier: ticket.tier } : {}) }
+      await update($, agents, all => keptAgents({ ...all, [id]: agent }))
+    }
+    return res
   }).catch(($, e, next) => next(e))
 
   // A check the main session ran: three failures in a row climb the task, a pass after a climb settles it, and a
@@ -586,7 +606,7 @@ export const register: Register = on => {
       const agent = await subAgent($, id)
       if (!agent.isClimbable) return ran
       const startTier: ModelTier = agent.tier ?? tierOf(taskModel(await read($, task), await read($, sessionModel))) ?? 'opus'
-      const after = agent.ticket ? afterTicketAgentCheck(agent, ran.isError !== true, startTier) : afterAgentCheck(agent, ran.isError !== true)
+      const after = agent.ticket ? afterTicketAgentCheck(agent, ran.isError !== true, startTier) : afterAgentCheck(agent, ran.isError !== true, agent.model ?? null)
       await update($, agents, all => keptAgents({ ...all, [id]: after }))
       return ran
     }

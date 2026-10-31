@@ -74,6 +74,8 @@ export type SubAgent = {
   ticket?: string
   /** The model family it runs on, when a ticket set it or its climbs moved it; absent: as it started. */
   tier?: ModelTier
+  /** The model its last request went out on; absent until one is seen. */
+  model?: string
 }
 
 /** What a ticket names for itself: its `Model:` and `Effort:` lines, or Haiku's reading of it when it has none. */
@@ -138,7 +140,7 @@ declare module 'claude-code' {
       seenLast: { score: string; effort: string; model: string; starts: number; haikuCalls?: number; view?: string }
       /** The session's sub-agents by id, the latest ones kept. */
       agents: Record<string, SubAgent>
-      /** Tickets handed to sub-agents not yet seen running, by the Agent call's description. */
+      /** Tickets handed to sub-agents not yet started, by the Agent call's tool_use_id. */
       handed: Record<string, { ticket: string } & TicketSetting>
       /** Counts new tasks, so a late score applies only to the task it was asked for. */
       scoring: number
