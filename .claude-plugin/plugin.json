@@ -10,6 +10,9 @@
   "types": "./types/index.d.ts",
   "repository": "https://github.com/JakkapatB/open-effort",
   "homepage": "https://github.com/JakkapatB/open-effort",
+  "documentationUrl": "https://github.com/JakkapatB/open-effort#readme",
+  "supportUrl": "https://github.com/JakkapatB/open-effort/issues",
+  "privacyPolicyUrl": "https://github.com/JakkapatB/open-effort#data-and-privacy",
   "keywords": [
     "effort",
     "model",
