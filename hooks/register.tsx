@@ -780,7 +780,7 @@ export const register: Register = on => {
       // A sub-agent's first turn starts with the Agent call's prompt: one naming a ticket handed out takes it up.
       const path = ticketIn(e.text)
       const number = path ? ticketOf(path) : null
-      const handOff = number ? Object.entries(await read($, handed)).find(([, h]) => h.ticket === number) : undefined
+      const handOff = number ? Object.entries(await read($, handed)).find(([, given]) => given.ticket === number) : undefined
       if (handOff) await takeUpTicket($, id, handOff[0])
     }
     return res
