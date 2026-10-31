@@ -13,7 +13,7 @@ import {
 import {
   EFFORTS, FABLE_MODEL, FAILS_TO_STALL, FLOW_MODELS, FRESH_TASK, TIER_MODEL, afterAgentCheck, afterCheck, afterTicketAgentCheck, enteredStage, enteredTicket,
   fitEffort, flowModelFor, isBuiltInAgent, isEffort, isFable, isFlowModel, modelUp, rungOf, startingEffort, subAgentStart, supportedEfforts, taskModel, ticketIn, ticketOf,
-  ticketSettingOf, tierOf,
+  ticketLinesOf, tierOf,
 } from './policy'
 import type { FlowModel } from './policy'
 import { SCORE_GRACE_MS, isGoOn, isUnsure, scoreRequest } from './score'
@@ -172,8 +172,9 @@ async function moveToStage($: EngineInterface, stage: Stage, by: StageMover): Pr
 }
 
 /**
- * A ticket's setting: the Model and Effort lines it names, else Haiku's reading of it (its effort, and its model
- * when Haiku is sure); null when the file cannot be read or Haiku gives no score.
+ * A ticket's setting: the Model and Effort lines it names; Haiku reads it for an effort it does not name (and for
+ * its model when it names none and Haiku is sure). Null when the file cannot be read, or it names no effort and
+ * Haiku gives no score.
  */
 async function ticketSetting($: EngineInterface, path: string): Promise<TicketSetting | null> {
   let text: string
@@ -182,11 +183,11 @@ async function ticketSetting($: EngineInterface, path: string): Promise<TicketSe
   } catch {
     return null
   }
-  const named = ticketSettingOf(text)
-  if (named) return named
+  const named = ticketLinesOf(text)
+  if (named.effort) return { ...(named.tier ? { tier: named.tier } : {}), effort: named.effort }
   const { score } = await scoreRequest($, text)
   if (!score) return null
-  const tier = !isUnsure(score) ? score.model : undefined
+  const tier = named.tier ?? (!isUnsure(score) ? score.model : undefined)
   return { ...(tier ? { tier } : {}), effort: startingEffort(score) }
 }
 
@@ -545,7 +546,10 @@ export const register: Register = on => {
       if (setting) {
         await update($, handed, all => ({ ...all, [e.description]: { ticket: number, ...setting } }))
         const model = setting.tier ?? taskTier
-        return next({ ...e, effort: setting.effort, ...(model ? { model } : {}) })
+        const ran = await next({ ...e, effort: setting.effort, ...(model ? { model } : {}) })
+        // A hand-off refused or failed starts no agent: its entry would wait for a later one of the same description.
+        if (ran.deny !== undefined || ran.isError === true) await update($, handed, all => Object.fromEntries(Object.entries(all).filter(([d]) => d !== e.description)))
+        return ran
       }
     }
     const start = subAgentStart(e.subagent_type, main?.effort ?? null, taskTier)

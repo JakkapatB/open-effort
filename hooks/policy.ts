@@ -223,7 +223,9 @@ export function ticketOf(path: string): string | null {
 /** The first ticket file a sub-agent's prompt names, as Claude hands one ticket to each; null for none. */
 export function ticketIn(prompt: string): string | null {
   for (const word of prompt.split(/[\s'"`()[\]<>]+/)) {
-    if (TICKET_FILE.test(word)) return word
+    // A path that ends a sentence or a clause: `…/03-rules.md.` or `…/03-rules.md,`.
+    const path = word.replace(/[.,;:!?]+$/, '')
+    if (TICKET_FILE.test(path)) return path
   }
   return null
 }
@@ -239,16 +241,15 @@ function lineValue(text: string, name: string): string | undefined {
 }
 
 /**
- * The setting a ticket names: the model family first named on its `Model:` line (`Opus 5.5` and `claude-opus-5-5`
- * both read as opus) and the effort on its `Effort:` line (`extra high` is xhigh). Null when it names no effort,
- * so Haiku reads it instead.
+ * What a ticket names for itself: the model family first named on its `Model:` line (`Opus 5.5` and
+ * `claude-opus-5-5` both read as opus) and the effort on its `Effort:` line (`extra high` is xhigh); each absent
+ * when its line is, and Haiku reads the ticket for what is missing.
  */
-export function ticketSettingOf(text: string): TicketSetting | null {
-  const model = new RegExp(TIERS.join('|')).exec(lineValue(text, 'model') ?? '')?.[0] as ModelTier | undefined
+export function ticketLinesOf(text: string): Partial<TicketSetting> {
+  const tier = new RegExp(TIERS.join('|')).exec(lineValue(text, 'model') ?? '')?.[0] as ModelTier | undefined
   const named = /\b(x[-\s]?high|extra[-\s]?high|low|medium|high|max)\b/.exec(lineValue(text, 'effort') ?? '')?.[1]
-  if (!named) return null
-  const effort: Effort = named.startsWith('x') || named.startsWith('extra') ? 'xhigh' : (named as Effort)
-  return { ...(model ? { tier: model } : {}), effort }
+  const effort: Effort | undefined = !named ? undefined : named.startsWith('x') || named.startsWith('extra') ? 'xhigh' : (named as Effort)
+  return { ...(tier ? { tier } : {}), ...(effort ? { effort } : {}) }
 }
 
 /** The main session takes up a ticket in the implement stage: its effort, a fresh count of checks; its model stays. */

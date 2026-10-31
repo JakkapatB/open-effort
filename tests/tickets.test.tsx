@@ -11,6 +11,7 @@ const FILES = {
   [T3]: '# Coupon rules\n\nModel: Sonnet 5.5\nEffort: high\n\nApply one coupon per cart.',
   [T4]: '# Coupon copy\n\n**Effort:** low\n\nReword the coupon field label.',
   'work/coupons/issues/05-unlabelled.md': '# Stack coupons\n\nLet two coupons stack.',
+  'work/coupons/issues/06-model-only.md': '# Coupon audit log\n\nModel: opus\n\nRecord every coupon applied.',
 }
 
 async function stage($: Engine, name: string) {
@@ -121,6 +122,24 @@ test('on a Sonnet session in the flow, a ticket with no Model line runs its sub-
   await type($, 'add coupons to checkout')
   await stage($, 'implement')
   await $.tool.call({ tool: 'Agent', description: 'ticket 04', prompt: `Implement ${T4} with TDD.` } as never)
+
+  const agentCall = calls.find(c => c.tool === 'Agent')
+  expect([agentCall?.model, agentCall?.effort]).toEqual(['opus', 'low'])
+})
+
+test('a ticket path that ends a sentence is still the ticket', async ($, on) => {
+  const { calls } = engine(on, { haiku: LARGE, matt: MATT_SKILLS, files: FILES })
+  await implementing($)
+  await $.tool.call({ tool: 'Agent', description: 'ticket 03', prompt: `Implement ${T3}. Then report back.` } as never)
+
+  const agentCall = calls.find(c => c.tool === 'Agent')
+  expect([agentCall?.model, agentCall?.effort]).toEqual(['sonnet', 'high'])
+})
+
+test('a ticket that names only its model keeps that model, and Haiku reads its effort', async ($, on) => {
+  const { calls } = engine(on, { haiku: [LARGE, 'clarity=clear hard=no risky=no size=small model=haiku sure=90'], matt: MATT_SKILLS, files: FILES })
+  await implementing($)
+  await $.tool.call({ tool: 'Agent', description: 'ticket 06', prompt: 'Implement work/coupons/issues/06-model-only.md with TDD.' } as never)
 
   const agentCall = calls.find(c => c.tool === 'Agent')
   expect([agentCall?.model, agentCall?.effort]).toEqual(['opus', 'low'])
