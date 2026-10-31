@@ -2,7 +2,7 @@ import type { TurnStepInput } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
-import { MATT_SKILLS, engine, fail, request, run, spawn, start, type } from './engine'
+import { MATT_SKILLS, engine, fail, request, run, start, type } from './engine'
 
 const LARGE = 'clarity=unclear hard=no risky=no size=large sure=90'
 const T3 = 'work/coupons/issues/03-coupon-rules.md'
@@ -88,8 +88,8 @@ test('a ticket’s sub-agent climbs its effort to xhigh, then a model up', async
   const { sent, bash } = engine(on, { haiku: LARGE, matt: MATT_SKILLS, files: FILES })
   await implementing($)
   await $.tool.call({ tool: 'Agent', tool_use_id: 'tu-3', description: 'ticket 03', prompt: `Implement ${T3} with TDD.` } as never)
-  await spawn($, 'tu-3', 'ticket 03', `Implement ${T3} with TDD.`)
-  await $.turn.start({ text: 'work', turnId: 't-t3', agentId: 't3' })
+  // The sub-agent's first turn starts with the Agent call's prompt, which names the ticket.
+  await $.turn.start({ text: `Implement ${T3} with TDD.`, turnId: 't-t3', agentId: 't3' })
   let index = 0
   await agentStep($, 't3', 'claude-sonnet-5-5', 'high', index++)
   for (let round = 0; round < 2; round++) {
@@ -152,10 +152,10 @@ test('two hand-offs under one description each keep their own ticket', async ($,
   // Both calls are made before either agent starts: matched by description, the second would take the first's place.
   await $.tool.call({ tool: 'Agent', tool_use_id: 'tu-a', description: 'implement ticket', prompt: `Implement ${T3}.` } as never)
   await $.tool.call({ tool: 'Agent', tool_use_id: 'tu-b', description: 'implement ticket', prompt: `Implement ${T4}.` } as never)
-  const a = await spawn($, 'tu-a', 'implement ticket', `Implement ${T3}.`)
-  const b = await spawn($, 'tu-b', 'implement ticket', `Implement ${T4}.`)
-  expect(a).not.toBe(b)
-  if (!a || !b) return
+  const a = 'agent-a'
+  const b = 'agent-b'
+  await $.turn.start({ text: `Implement ${T3}.`, turnId: `t-${a}`, agentId: a })
+  await $.turn.start({ text: `Implement ${T4}.`, turnId: `t-${b}`, agentId: b })
   // Each climbs from its own ticket's effort: ticket 03 from high, ticket 04 from low.
   for (const id of [a, b]) {
     await agentStep($, id, 'claude-opus-5-5', id === a ? 'high' : 'low', 0)
@@ -189,4 +189,17 @@ test('Haiku reads a ticket without lines once, while its text stays the same', a
   await $.tool.call({ tool: 'Read', file_path: 'work/coupons/issues/05-unlabelled.md' } as never)
 
   expect(asked.length).toBe(2)
+})
+
+test('a ticket\u2019s sub-agent is known from the Agent call\u2019s answer when its first turn named no ticket', async ($, on) => {
+  const { sent, bash } = engine(on, { haiku: LARGE, matt: MATT_SKILLS, files: FILES })
+  await implementing($)
+  // The Agent call answers with the agent's id (t3, by its description in the test engine).
+  await $.tool.call({ tool: 'Agent', tool_use_id: 'tu-3', description: 'ticket 03', prompt: `Implement ${T3} with TDD.` } as never)
+  await $.turn.start({ text: '', turnId: 't-t3', agentId: 't3' })
+  await agentStep($, 't3', 'claude-sonnet-5-5', 'high', 0)
+  for (let i = 0; i < 3; i++) await run($, bash, 'npm test', false, 't3')
+  await agentStep($, 't3', 'claude-sonnet-5-5', 'high', 1)
+
+  expect(sent.filter(e => e.agentId === 't3').map(e => e.effort)).toEqual(['high', 'xhigh'])
 })

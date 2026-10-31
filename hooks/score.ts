@@ -1,4 +1,4 @@
-import type { EngineInterface } from 'claude-code'
+import type { ModelCompleteResult } from 'claude-code'
 
 import type { Clarity, ModelTier, Score, Size } from '../types'
 
@@ -66,14 +66,13 @@ export type Scored = { score: Score | null; outcome: string }
 /** How much of what Claude said last goes with a message to Haiku, from its end. */
 const SAID_CHARS = 800
 
-/**
- * One Haiku call with the whole request, at low effort: it decides, it does not reason at length. With what Claude
- * said last (`said`), Haiku also judges whether the message goes on with the work under way. No score when it times
- * out, fails or answers none.
- */
-export async function scoreRequest($: EngineInterface, text: string, said?: string): Promise<Scored> {
-  const prompt = said ? `Claude said last:\n${said.slice(-SAID_CHARS)}\n\nThe person now typed:\n${text.trim()}` : text.trim()
-  const res = await $.model.complete({ model: 'haiku', system: SCORE_SYSTEM, prompt, maxTokens: 64, effort: 'low', timeoutMs: SCORE_TIMEOUT_MS })
+/** What Haiku is given to read: the request, after the end of what Claude said last when there is that. */
+export function scorePrompt(text: string, said?: string): string {
+  return said ? `Claude said last:\n${said.slice(-SAID_CHARS)}\n\nThe person now typed:\n${text.trim()}` : text.trim()
+}
+
+/** A score from Haiku's answer, or why there is none: the call's reason, or its reply when it named no clarity. */
+export function scoredFrom(res: ModelCompleteResult): Scored {
   if (!res.isAnswered) return { score: null, outcome: res.reason === 'api-error' ? `api-error ${res.status ?? ''}`.trim() : res.reason }
   const score = parseScore(res.text)
   return { score, outcome: score ? 'scored' : `unparsed: ${res.text.slice(0, 120)}` }

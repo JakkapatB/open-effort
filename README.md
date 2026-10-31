@@ -168,9 +168,28 @@ Test, typecheck, build and lint runs (JavaScript/TypeScript, Python, Go, Rust, N
 
 - Everything stays in Claude Code's plugin store on your machine.
 - The history never keeps what you typed: only times, efforts, readings, counts and model names.
-- No network calls of its own. Its only model call is the Haiku reading of a new request (with the end of Claude's last message when a task is under way), or of a ticket without `Model:` and `Effort:` lines, sent through Claude Code.
+- **What it sends, and where.** The mod makes no network calls of its own. It sends text to one place: Claude's Haiku model, through Claude Code's own model call (`$.model.complete`), on your account, like any other Claude Code request. It sends:
+  - each new request you type, and the last 800 characters of Claude's last message when a task is under way, to read how hard the work is;
+  - the text of a ticket file without `Model:` and `Effort:` lines, to read the same for the ticket.
+- **Notes to Claude.** It adds short notes for Claude to the conversation (`$.session.append`, and context on your prompt): to ask you about a stronger model or the Main Flow, how to name a ticket's model and effort, and when to stop and ask you. They go to Claude with the conversation, as your messages do.
 - It reads only ticket files (`<feature>/issues/NN-*.md`) in the implement stage, and writes no files.
-- It adds notes for Claude to the conversation, and registers three tools: `stage`, `model` and `report`.
+- It registers three tools of its own, `stage`, `model` and `report`, and the `/open-effort` command.
+
+### What each hook does
+
+| Hook | What it does | What it changes |
+|---|---|---|
+| `turn.step` | Sets each model request's effort, and its model when the task moved to another one | The request's `effort` and `model` |
+| `tool.call` on `Agent` | Sets a sub-agent's model and effort by its type, or from a ticket handed to it | The call's `model` and `effort`, only when the call names neither |
+| `prompt.submit` | Has Haiku read a new request; adds the notes above when there is a question for you | Adds context to the prompt; the prompt's text is never changed |
+| `tool.call` on `Bash` | Counts test, lint, build and typecheck runs as passing or failing checks | Nothing |
+| `tool.call` on `Read`, `Skill`, `Edit`, `Write` | Notices a stage's skill being used, a ticket being read, a test being written | Nothing |
+| `tool.call` on `mcp__open-effort__stage`, `__model`, `__report` | Answers the mod's own three tools | They are the mod's own tools |
+| `turn.start`, `turn.complete`, `session.start`, `session.end` | Tracks sub-agents at work, the turn's history entry, the project's switches | Nothing |
+| `command.run` on `open-effort` | Answers the mod's own `/open-effort` command | It is the mod's own command |
+| `ui.render` | Draws the band above the prompt and the pane | Adds the band and the pane |
+
+**Another plugin.** The Main Flow is Matt Pocock's `mattpocock-skills` plugin. The mod lists your installed commands to see whether it is there, and reacts when Claude uses one of its skills. It never calls that plugin's code.
 
 ### Limits
 
