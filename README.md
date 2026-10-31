@@ -20,10 +20,10 @@
 ## What it does
 
 - 🎯 **Fits the effort.** Haiku reads each new request: a clear plan starts at `low`, a hard one at `xhigh`.
-- 📈 **Climbs when stuck.** Three failing checks in a row raise the effort, then move to Fable 5.1, then ask you.
-- 🧠 **Picks the model, with your say.** Work that needs a stronger model asks you once before it switches.
+- 📈 **Raises the effort when stuck.** Three failing checks in a row raise the effort one level. Past the highest level it switches to Fable 5.1, and if checks still fail, Claude stops and asks you what to do.
+- 🧠 **Asks before switching models.** If the work needs a stronger model than the session's, Claude asks you first.
 - 🗺️ **Runs Matt Pocock's Main Flow.** Grill to retro, every stage and every ticket at its own effort.
-- 👀 **Shows you why.** A band above the prompt, and a pane with switches, themes and history.
+- 👀 **Shows what it uses, and why.** A band above the prompt shows the effort and model in use; a pane holds the switches, themes and history.
 
 ## Install
 
@@ -40,16 +40,16 @@ Nothing to set up: the band appears as soon as it is installed.
 ## How it works
 
 <p align="center">
-  <img src="docs/images/flow-en.png" width="760" alt="You type a request, Haiku reads it, Claude asks about big work or a stronger model, Claude works at the starting effort, and three failing checks in a row climb one rung">
+  <img src="docs/images/flow-en.png" width="760" alt="You type a request, Haiku reads it, Claude asks you about big work or a stronger model, Claude works at the starting effort, a passing check returns to the starting effort, and three failing checks in a row raise it one level">
 </p>
 
 ### The ladder
 
 <p align="center">
-  <img src="docs/images/ladder-en.png" width="640" alt="low, medium, high, xhigh, then Fable 5.1 at high, xhigh and max, then Claude asks you">
+  <img src="docs/images/ladder-en.png" width="640" alt="low, medium, high, xhigh, then Fable 5.1 at high, xhigh and max; if checks still fail, Claude stops and asks you">
 </p>
 
-A passing check settles the effort back to where it started.
+When a check passes, the effort goes back to the level the task started at.
 
 <p align="center">
   <img src="docs/images/states.png" width="760" alt="The band in each state: scored, a failing check, a climb, Fable 5.1, and stopped at the top">
@@ -59,7 +59,7 @@ A passing check settles the effort back to where it started.
 
 | Haiku reads | Effort |
 |---|---|
-| A clear plan (a rename, a known pattern) | `low` |
+| You know what to do and how (a rename, a known pattern) | `low` |
 | A known goal, the way needs thought | `medium` |
 | The plan is not clear yet | `high` |
 | Unusually hard (concurrency, migrations) | `xhigh` |
@@ -78,7 +78,7 @@ The mod never picks `max` by itself.
 | Effort | `high` | `high` | `medium` | `high` | `xhigh` | `medium` |
 
 - The flow runs on **Opus 5.5** by default. Pick **Fable 5.1** or **the session's model** in the pane.
-- Each ticket carries its own `Model:` and `Effort:`. A sub-agent working a ticket runs on both.
+- Each ticket can set its own `Model:` and `Effort:`. A sub-agent given a ticket uses the model and effort the ticket sets.
 - Needs [Matt Pocock's skills](https://github.com/mattpocock/skills). The pane says which are missing.
 
 ## The pane
@@ -104,7 +104,7 @@ Open it with `/open-effort` or the band's **≡**.
 
 ### One model per task
 
-A task keeps one model from start to end, so the prompt cache holds. It changes only when you agree to a stronger model at the start, when it enters the Main Flow, or when it climbs past `xhigh` to Fable 5.1. It never steps down.
+A task keeps one model from start to end, so the prompt cache holds. It changes only when you agree to a stronger model at the start, when it enters the Main Flow, or when the effort goes past `xhigh` and it switches to Fable 5.1. It never switches to a weaker model by itself.
 
 ### Models and effort
 
