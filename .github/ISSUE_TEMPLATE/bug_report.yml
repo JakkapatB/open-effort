@@ -1,0 +1,51 @@
+name: Bug report
+description: The mod did something it should not, or did not do what the README says.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what the mod did, and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Start a session on ...
+        2. Type ...
+        3. The band shows ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Claude Code version
+      placeholder: "2.1.308"
+    validations:
+      required: true
+  - type: input
+    id: model
+    attributes:
+      label: Session model and effort
+      placeholder: "Opus 5.5, high"
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Where you ran it
+      options: [Desktop app, Terminal, VS Code, Other]
+    validations:
+      required: true
+  - type: textarea
+    id: report
+    attributes:
+      label: Output of the report tool
+      description: Ask Claude "call mcp__open-effort__report and show me the result", and paste it here.
+      render: json
+  - type: textarea
+    id: screenshot
+    attributes:
+      label: Screenshot of the band or pane
+      description: Drag an image here if it helps.
