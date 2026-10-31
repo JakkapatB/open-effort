@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'claude-code/testing'
 
-import { bandText, engine, fail, request, run, start, type } from './engine'
+import { BAND, bandText, engine, fail, request, run, start, type } from './engine'
 
 const CLEAR = 'clarity=clear hard=no risky=no size=small'
 const GOAL = 'clarity=goal hard=no risky=no size=small'
@@ -311,4 +311,18 @@ test('while a new prompt waits for its score, its requests leave the last taskâ€
   await request($, 'high', 3)
 
   expect(sent.map(e => e.effort)).toEqual(['low', 'medium', 'high', 'low'])
+})
+
+test('settled back on Fable 5.1, the band still names Fable 5.1', async ($, on) => {
+  const { bash } = engine(on, { haiku: 'clarity=clear hard=yes risky=no size=small sure=90' })
+  await start($)
+  await type($, 'fix the race in the cart lock')
+  await request($, 'high', 0)
+  await fail($, bash)
+  await run($, bash, 'npm test', true)
+
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const drawn = JSON.stringify(await ui.drawn())
+  await ui.unmount()
+  expect(drawn).toContain('Effort Â· Fable 5.1')
 })

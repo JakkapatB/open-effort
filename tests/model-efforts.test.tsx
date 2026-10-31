@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import { fitEffort, supportedEfforts } from '../hooks/policy'
-import { engine, fail, request, start, type } from './engine'
+import { BAND, engine, fail, request, start, type } from './engine'
 
 const CLEAR = 'clarity=clear hard=no risky=no size=small'
 const HARD = 'clarity=clear hard=yes risky=no size=large'
@@ -63,4 +63,17 @@ test('a model that takes no effort is left alone', async ($, on) => {
     ['claude-sonnet-4-5', undefined],
     ['claude-sonnet-4-5', undefined],
   ])
+})
+
+test('the band shows the effort that goes out, fitted to the model', async ($, on) => {
+  engine(on, { haiku: HARD })
+  await start($)
+  await type($, 'redesign the cache')
+  await request($, 'high', 0, 'claude-opus-4-6')
+
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const drawn = JSON.stringify(await ui.drawn())
+  await ui.unmount()
+  expect(drawn).toContain('>high</text>')
+  expect(drawn).not.toContain('>xhigh</text>')
 })

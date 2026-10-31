@@ -685,7 +685,8 @@ export const register: Register = on => {
         : t.climbed && isFresh(climbKey)
           ? { label: `${words.steps.climbed} ↑ ${t.climbed.effort}`, tone: onFable ? 'violet' : 'brand', isNew: true, isLeaving: true }
           : undefined
-    const effortModel = t.climbed && onFable ? 'Fable 5.1' : modelName(model)
+    // Fable 5.1 once the task reached it, settled back or not: its requests stay there.
+    const effortModel = onFable ? 'Fable 5.1' : modelName(model)
     const steps: Step[] = [
       source === 'stage'
         ? { title: words.steps.stage, value: `${t.stage ?? ''}${t.ticket ? ` · ${words.steps.ticket(t.ticket)}` : ''}`, state: 'done', rank: 1 }
@@ -693,7 +694,8 @@ export const register: Register = on => {
       {
         title: `${words.steps.effort} · ${effortModel}`,
         ...(t.climbed && t.effort ? { aside: words.steps.from(t.effort) } : {}),
-        value: t.climbed?.effort ?? t.effort ?? rung?.effort ?? words.steps.own,
+        // What goes out: the effort fitted to the model, as the band's line says.
+        value: rung?.effort ?? words.steps.own,
         state: t.isAtLadderEnd ? 'done' : loop?.tone === 'alert' ? 'alert' : onFable ? 'violet' : rung ? 'active' : 'idle',
         meter,
         rank: 3,
