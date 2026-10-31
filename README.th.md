@@ -39,27 +39,15 @@
 
 ## ทำงานยังไง
 
-```mermaid
-flowchart LR
-    A([คุณพิมพ์งาน]) --> B[Haiku อ่านงาน]
-    B --> C{ต้องการมากกว่านี้ไหม}
-    C -- งานใหญ่ --> D[ถาม: เข้า Main Flow ไหม]
-    C -- ต้องใช้โมเดลที่เก่งกว่า --> E[ถาม: เปลี่ยนโมเดลไหม]
-    C -- ไม่ --> F
-    D --> F[Claude ทำงานที่<br/>effort เริ่มต้น]
-    E --> F
-    F --> G{check}
-    G -- ผ่าน --> F
-    G -- ไม่ผ่าน 3 ครั้ง --> H[ไต่ขึ้นหนึ่งขั้น]
-    H --> F
-```
+<p align="center">
+  <img src="docs/images/flow-th.png" width="760" alt="คุณพิมพ์งาน, Haiku อ่านงาน, Claude ถามเรื่องงานใหญ่หรือโมเดลที่เก่งกว่า, Claude ทำงานที่ effort เริ่มต้น และ check ไม่ผ่าน 3 ครั้งติดจะไต่ขึ้นหนึ่งขั้น">
+</p>
 
 ### บันได effort
 
-```mermaid
-flowchart LR
-    low --> medium --> high --> xhigh --> F1["Fable 5.1<br/>high · xhigh · max"] --> ask([Claude ถามคุณ])
-```
+<p align="center">
+  <img src="docs/images/ladder-th.png" width="640" alt="low, medium, high, xhigh แล้ว Fable 5.1 ที่ high, xhigh, max แล้ว Claude ถามคุณ">
+</p>
 
 check ผ่านเมื่อไหร่ effort กลับไปที่เดิม
 

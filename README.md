@@ -39,27 +39,15 @@ Nothing to set up: the band appears as soon as it is installed.
 
 ## How it works
 
-```mermaid
-flowchart LR
-    A([You type a request]) --> B[Haiku reads it]
-    B --> C{Needs more?}
-    C -- big work --> D[Ask: Main Flow?]
-    C -- stronger model --> E[Ask: switch model?]
-    C -- no --> F
-    D --> F[Claude works at<br/>the starting effort]
-    E --> F
-    F --> G{Checks}
-    G -- pass --> F
-    G -- fail 3× --> H[Climb one rung]
-    H --> F
-```
+<p align="center">
+  <img src="docs/images/flow-en.png" width="760" alt="You type a request, Haiku reads it, Claude asks about big work or a stronger model, Claude works at the starting effort, and three failing checks in a row climb one rung">
+</p>
 
 ### The ladder
 
-```mermaid
-flowchart LR
-    low --> medium --> high --> xhigh --> F1["Fable 5.1<br/>high · xhigh · max"] --> ask([Claude asks you])
-```
+<p align="center">
+  <img src="docs/images/ladder-en.png" width="640" alt="low, medium, high, xhigh, then Fable 5.1 at high, xhigh and max, then Claude asks you">
+</p>
 
 A passing check settles the effort back to where it started.
 
