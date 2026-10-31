@@ -242,3 +242,10 @@ test('the pane lists the four themes', async ($, on) => {
   const text = await paneText($)
   for (const name of ['Claude', 'Lime', 'Ocean', 'Rose']) expect(text).toContain(name)
 })
+
+test('a stored turn without its models still draws', async ($, on) => {
+  engine(on, { store: { 'history:/work/app': [{ at: Date.UTC(2026, 9, 30, 9, 0), mode: 'normal', score: null, stage: null, start: 'high', efforts: ['high'], climbs: 0 }] } })
+  await start($)
+
+  for (const surface of ['desktop', 'terminal'] as const) expect(await paneText($, surface)).toContain('1')
+})

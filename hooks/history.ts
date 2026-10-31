@@ -43,8 +43,11 @@ export function appended(history: readonly HistoryEntry[], entry: HistoryEntry):
   return [...history, entry].slice(-HISTORY_SIZE)
 }
 
-/** The stored history of a project, entries of the wrong shape dropped. */
+/** The stored history of a project: entries of the wrong shape dropped, a list missing from an entry read as empty. */
 export function historyFrom(stored: unknown): HistoryEntry[] {
   if (!Array.isArray(stored)) return []
-  return stored.filter((e): e is HistoryEntry => !!e && typeof e === 'object' && typeof e.at === 'number' && Array.isArray(e.efforts)).slice(-HISTORY_SIZE)
+  return stored
+    .filter((e): e is HistoryEntry => !!e && typeof e === 'object' && typeof e.at === 'number' && Array.isArray(e.efforts))
+    .map(e => (Array.isArray(e.models) ? e : { ...e, models: [] }))
+    .slice(-HISTORY_SIZE)
 }

@@ -119,7 +119,9 @@ declare module 'claude-code' {
       /** The project the session works in; null until the session starts. */
       project: Project | null
       languageChoice: LanguageChoice
+      /** Spelled out here, as the contract file stands alone: ThemeId in diagrams.ts. */
       themeChoice: 'claude' | 'lime' | 'ocean' | 'rose'
+      /** Spelled out here, as the contract file stands alone: FlowModel in policy.ts. */
       flowModel: 'frontier' | 'fable' | 'session'
       /** The project's finished turns, oldest first. */
       history: HistoryEntry[]
@@ -137,6 +139,8 @@ declare module 'claude-code' {
       scoring: number
       /** Whether the surface can put an agent's transcript in view; false once it said it draws no main view. */
       canView: boolean
+      /** Whether a prompt's score is still on its way: its requests go out at the session's own effort meanwhile. */
+      isScoring: boolean
       /** The Main Flow skills this session lacks; empty when Matt Pocock's skills are installed. */
       missing: string[]
       turnLog: TurnLog

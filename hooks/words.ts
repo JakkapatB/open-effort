@@ -1,5 +1,7 @@
 import type { Clarity, Effort, HistoryEntry, Language, Score, Stage } from '../types'
+import type { ThemeId } from './diagrams'
 import { FAILS_TO_STALL, isFable } from './policy'
+import type { FlowModel } from './policy'
 import { isUnsure } from './score'
 
 /** Thai when Claude Code's `language` setting names Thai (`thai`, `th`, `ไทย`, any case), else English. */
@@ -66,10 +68,10 @@ export type PaneWords = {
   auto: string
   theme: string
   flowModel: string
-  flowModels: Readonly<Record<'frontier' | 'fable' | 'session', string>>
+  flowModels: Readonly<Record<FlowModel, string>>
   /** What each Main Flow model costs: its limits, said where it is picked. */
-  flowModelLimits: Readonly<Record<'frontier' | 'fable' | 'session', string>>
-  themes: Readonly<Record<'claude' | 'lime' | 'ocean' | 'rose', string>>
+  flowModelLimits: Readonly<Record<FlowModel, string>>
+  themes: Readonly<Record<ThemeId, string>>
   history: (turns: number) => string
   noHistory: string
   /** One history entry as a line: its efforts, why, climbs and models (its time stands beside it); never what was typed. */

@@ -1,7 +1,7 @@
 import type { HistoryEntry, Stage, Task } from '../types'
 import { STAGES } from './main-flow'
 import { EFFORTS, isFable } from './policy'
-import { modelName } from './words'
+import { clockTime, modelName } from './words'
 
 /** How a step stands: done, in effect now, needing attention, on Fable 5.1, at the ladder's end, or idle. */
 export type StepState = 'done' | 'active' | 'alert' | 'violet' | 'red' | 'idle'
@@ -367,16 +367,17 @@ function levelOf(effort: string, onFable: boolean): number {
   return onFable ? 5 : Math.max(0, EFFORTS.indexOf(effort as (typeof EFFORTS)[number]))
 }
 
-/**
- * The history as charts that answer questions, `width` wide:
- * - over time, one bar per turn from the effort it started at to the highest it reached, the climb in amber and
- *   Fable 5.1 in violet, effort levels named on the left and times along the bottom; hovering a bar names the turn;
- * - beneath, where turns start: per effort level, how many started there and how many of those climbed.
- */
+/** How many turns a model's efforts hold in all. */
 function sum(efforts: Map<string, { all: number }>): number {
   return [...efforts.values()].reduce((n, c) => n + c.all, 0)
 }
 
+/**
+ * The history as charts that answer questions, `width` wide:
+ * - over time, one bar per turn from the effort it started at to the highest it reached, the climb in amber and
+ *   Fable 5.1 in violet, effort levels named on the left and times along the bottom; hovering a bar names the turn;
+ * - beneath, model and effort together: per model, how many turns started at each effort and how many climbed.
+ */
 export function historySvg(entries: readonly HistoryEntry[], width: number, words: ChartWords): Drawing {
   const left = 58
   const plotW = Math.max(60, width - left - 8)
@@ -417,8 +418,7 @@ export function historySvg(entries: readonly HistoryEntry[], width: number, word
   for (const i of ticks) {
     const e = recent[i]
     if (!e) continue
-    const d = new Date(e.at)
-    const label = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+    const label = clockTime(e.at)
     // The first and last labels keep inside the chart's edges.
     const at = left + i * step + step / 2
     const anchor = at + 15 > width ? 'end' : at - 15 < 0 ? 'start' : 'middle'

@@ -326,3 +326,17 @@ test('settled back on Fable 5.1, the band still names Fable 5.1', async ($, on) 
   await ui.unmount()
   expect(drawn).toContain('Effort · Fable 5.1')
 })
+
+test('a session the person runs at max climbs to Fable 5.1 at max, never down to high', async ($, on) => {
+  const { sent, bash } = engine(on, { haiku: 'timeout' })
+  await start($)
+  await type($, 'fix the race in the cart lock')
+  await request($, 'max', 0)
+  await fail($, bash)
+  await request($, 'max', 1)
+
+  expect(sent.map(e => [e.model, e.effort])).toEqual([
+    ['claude-opus-5-5', 'max'],
+    ['claude-fable-5-1', 'max'],
+  ])
+})

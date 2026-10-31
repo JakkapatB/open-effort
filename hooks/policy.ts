@@ -16,8 +16,6 @@ const RISK_FLOOR: Effort = 'medium'
 /** Failing checks in a row on one rung that make a stall. */
 export const FAILS_TO_STALL = 3
 
-/** The model a task moves to past the last effort rung on the session's model. */
-export const FABLE_MODEL = 'claude-fable-5-1'
 
 /** The model each family moves a task to: its current generation. */
 export const TIER_MODEL: Readonly<Record<ModelTier, string>> = {
@@ -26,6 +24,9 @@ export const TIER_MODEL: Readonly<Record<ModelTier, string>> = {
   opus: 'claude-opus-5-5',
   fable: 'claude-fable-5-1',
 }
+
+/** The model a task moves to past the last effort rung on its own model. */
+export const FABLE_MODEL = TIER_MODEL.fable
 
 /** A model's family; null for one not known. */
 export function tierOf(model: string | null): ModelTier | null {
@@ -143,7 +144,8 @@ export function rungOf(task: Task, own: Effort | null, model: string | null): Ru
 
 /**
  * The rung above: the next effort up to xhigh on `model`, the one the task runs on, then Fable 5.1 at high, xhigh
- * and max (on a task already on Fable, its max); null at the top. Max on the task's model climbs to Fable.
+ * and max (on a task already on Fable, its max); null at the top. Max on the task's model, which only the person's
+ * own session effort brings, climbs to Fable at max.
  */
 export function rungAbove(rung: Rung, model: string | null = null): Rung | null {
   const at = EFFORTS.indexOf(rung.effort)
@@ -153,7 +155,7 @@ export function rungAbove(rung: Rung, model: string | null = null): Rung | null 
   }
   // On the task's model the ladder goes no higher than xhigh, and only through the efforts that model takes.
   const next = supportedEfforts(model).find(effort => EFFORTS.indexOf(effort) > at && EFFORTS.indexOf(effort) <= EFFORTS.indexOf('xhigh'))
-  return next ? { effort: next, isFable: false } : { effort: 'high', isFable: true }
+  return next ? { effort: next, isFable: false } : { effort: rung.effort === 'max' ? 'max' : 'high', isFable: true }
 }
 
 /**

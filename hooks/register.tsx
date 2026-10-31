@@ -309,6 +309,11 @@ export const register: Register = on => {
     const res = await next(e)
     await update($, seenLast, last => ({ ...last, starts: last.starts + 1 }))
     await update($, isOn, () => true)
+    // A session started again (resumed, or cleared) without an end carries nothing over from before.
+    await setTask($, () => FRESH_TASK)
+    await update($, running, () => [])
+    await update($, handed, () => ({}))
+    await update($, isScoring, () => false)
     try {
       await loadProject($)
       // The session's own effort is known from its first request, not from an earlier session's.
