@@ -71,7 +71,9 @@ export const STAGE_TOOL_SPEC = {
     properties: { stage: { type: 'string', enum: [...STAGES, 'done'] } },
     required: ['stage'],
   },
-  isDeferred: false as const,
+  // Behind ToolSearch, as the engine places a plugin's tools: in the prompt's tool list it would change the prefix every
+  // session shares, and each new session with the mod would write its prompt cache afresh.
+  isDeferred: true as const,
 }
 
 /** Where a new task goes: a question for the person first (the Main Flow or directly), or normal mode. */
@@ -116,7 +118,9 @@ export const MODEL_TOOL_SPEC = {
     properties: { choice: { type: 'string', enum: ['up', 'keep'] } },
     required: ['choice'],
   },
-  isDeferred: false as const,
+  // Behind ToolSearch, as the engine places a plugin's tools: in the prompt's tool list it would change the prefix every
+  // session shares, and each new session with the mod would write its prompt cache afresh.
+  isDeferred: true as const,
 }
 
 /** The note asking Claude to offer the person a more capable model for the task. */
