@@ -77,6 +77,7 @@ The mod never picks `max` by itself.
 |---|---|---|---|---|---|---|
 | Effort | `high` | `high` | `medium` | `high` | `xhigh` | `medium` |
 
+- The flow starts only when you choose it, when Claude asks, or when you type a stage's command.
 - The flow runs on **Opus 5.5** by default. Pick **Fable 5.1** or **the session's model** in the pane.
 - Each ticket can set its own `Model:` and `Effort:`. A sub-agent given a ticket uses the model and effort the ticket sets.
 - Needs [Matt Pocock's skills](https://github.com/mattpocock/skills). The pane says which are missing.
@@ -96,7 +97,7 @@ A general-purpose sub-agent's effort follows the stage it runs in: the code-revi
 | **Your session's model** (the one you picked with `/model`) | Everything, unless a row below says otherwise |
 | **A stronger model Haiku suggests** | The whole task, only if you say yes when Claude asks at the start |
 | **Opus 5.5** | The whole Main Flow (change it in the pane). A session already on a stronger model keeps it |
-| **Fable 5.1** | After the effort goes past `xhigh` and checks still fail; in the Main Flow if you pick it; for a ticket that says `Model: fable` |
+| **Fable 5.1** | After the effort goes past `xhigh` and checks still fail; in the Main Flow if you pick it; for a ticket that says `Model: fable`; a ticket's sub-agent that climbs that far |
 | **Haiku** | Reading each new request and each ticket without `Model:` and `Effort:` lines; Explore sub-agents; tickets that say `Model: haiku` |
 | **A ticket's `Model:`** | The sub-agent that works that ticket. When Claude works a ticket itself, it keeps the task's model |
 
@@ -105,8 +106,8 @@ A general-purpose sub-agent's effort follows the stage it runs in: the code-revi
 | `low` | You know what to do and how; Explore sub-agents; Haiku's own reading |
 | `medium` | A known goal whose way needs thought; the lowest for risky work or when Haiku is unsure; the tickets and retro stages |
 | `high` | The plan is not clear yet; the grill, spec and implement stages; Plan sub-agents; the first step on Fable 5.1 |
-| `xhigh` | Unusually hard work; the review stage; the highest a sub-agent climbs to |
-| `max` | Only on Fable 5.1, after `high` and `xhigh` there still fail. Never picked at the start |
+| `xhigh` | Unusually hard work; the review stage; the highest a sub-agent climbs to (one working a ticket then moves a model up) |
+| `max` | On Fable 5.1, after `high` and `xhigh` there still fail; or when you set your session to `max` yourself. The mod never picks it at the start |
 
 Three failing checks in a row raise the effort one level; a passing check brings it back to where the task started. A ticket's `Effort:` overrides the stage's effort for that ticket.
 
@@ -137,7 +138,7 @@ A task keeps one model from start to end, so the prompt cache holds. It changes 
 
 ### Models and effort
 
-The current models take all five efforts. Opus and Sonnet 4.6 have no `xhigh`, Opus 4.5 stops at `high`, and Sonnet 4.5 and Haiku 4.5 take none. An effort a model does not take goes out as the nearest one below it.
+The current models take all five efforts. Opus and Sonnet 4.6 have no `xhigh`, Opus 4.5 stops at `high`, and Sonnet 4.5 and Haiku 4.5 take none. An effort a model does not take goes out as the nearest one below it. On a model that takes no effort the ladder does not climb, but a model the task moves to (the Main Flow's, or one you accepted) still applies.
 
 ### What counts as a check
 
@@ -155,7 +156,10 @@ Test, typecheck, build and lint runs (JavaScript/TypeScript, Python, Go, Rust, N
 
 - The mod API is new in Claude Code and may change.
 - Switching a task's model starts its prompt cache afresh.
-- A slow Haiku reading arrives during the turn; the first requests use the session's own effort.
+- A slow Haiku reading arrives during the turn; until it does, requests use the session's own effort.
+- If Haiku cannot read a message (it times out or fails), the message starts a new task at the session's own effort, even when it was a reply.
+- Ticket lines work with ticket files on disk (`<feature>/issues/NN-*.md`). Tickets kept in GitHub or Linear get none of this.
+- In the implement stage, each ticket file Claude reads sets the effort Claude works at: the mod takes it as the ticket Claude works next.
 - The notes to Claude are instructions, not enforcement.
 - The desktop app cannot open a sub-agent from the band: after the first try, the band lists them as labels.
 
