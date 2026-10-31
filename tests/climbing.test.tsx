@@ -295,3 +295,20 @@ test('a first prompt goes to Haiku alone, with nothing Claude said', async ($, o
 
   expect(asked.at(-1)?.prompt).toBe('rename getUser to fetchUser')
 })
+
+test('while a new prompt waits for its score, its requests leave the last task’s climb aside', async ($, on) => {
+  // Each score comes a little after the prompt's grace of 1.2 seconds.
+  const { sent, bash } = engine(on, { haiku: 'clarity=clear hard=no risky=no size=small sure=90', haikuDelayMs: 1300 })
+  await start($)
+  await type($, 'rename getUser to fetchUser')
+  await new Promise(resolve => setTimeout(resolve, 300))
+  await request($, 'high', 0)
+  await fail($, bash)
+  await request($, 'high', 1)
+  await type($, 'now write the README')
+  await request($, 'high', 2)
+  await new Promise(resolve => setTimeout(resolve, 300))
+  await request($, 'high', 3)
+
+  expect(sent.map(e => e.effort)).toEqual(['low', 'medium', 'high', 'low'])
+})

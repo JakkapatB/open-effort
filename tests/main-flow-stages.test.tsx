@@ -308,3 +308,17 @@ test('calling implement-spec starts the implement stage', async ($, on) => {
 
   expect(await effortNow($, sent, 1)).toBe('high')
 })
+
+test('a session on a model that takes no effort still moves to the frontier model in the flow', async ($, on) => {
+  const { sent } = await flow(on, { model: 'claude-sonnet-4-5' })
+  await start($)
+  await request($, 'none', 0, 'claude-sonnet-4-5')
+  await type($, 'add coupons to checkout')
+  await stage($, 'grill')
+  await request($, 'none', 1, 'claude-sonnet-4-5')
+
+  expect(sent.map(e => [e.model, e.effort])).toEqual([
+    ['claude-sonnet-4-5', undefined],
+    ['claude-opus-5-5', 'high'],
+  ])
+})

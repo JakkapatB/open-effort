@@ -12,7 +12,7 @@ import {
 } from './main-flow'
 import {
   EFFORTS, FABLE_MODEL, FAILS_TO_STALL, FLOW_MODELS, FRESH_TASK, TIER_MODEL, afterAgentCheck, afterCheck, afterTicketAgentCheck, enteredStage, enteredTicket,
-  fitEffort, flowModelFor, isBuiltInAgent, isEffort, isFable, isFlowModel, modelUp, rungOf, startingEffort, subAgentStart, taskModel, ticketIn, ticketOf,
+  fitEffort, flowModelFor, isBuiltInAgent, isEffort, isFable, isFlowModel, modelUp, rungOf, startingEffort, subAgentStart, supportedEfforts, taskModel, ticketIn, ticketOf,
   ticketSettingOf, tierOf,
 } from './policy'
 import type { FlowModel } from './policy'
@@ -47,6 +47,8 @@ const agents = atom({ plugin: 'open-effort', key: 'agents' } as const, {} as Rec
 const handed = atom({ plugin: 'open-effort', key: 'handed' } as const, {} as Record<string, { ticket: string } & TicketSetting>)
 // Counts new tasks, so a late score applies only to the task it was asked for.
 const scoring = atom({ plugin: 'open-effort', key: 'scoring' } as const, 0)
+// Whether a prompt's score is still on its way: its requests go out at the session's own effort meanwhile.
+const isScoring = atom({ plugin: 'open-effort', key: 'isScoring' } as const, false)
 // Whether the surface can put an agent's transcript in view; false once it said it draws no main view.
 const canView = atom({ plugin: 'open-effort', key: 'canView' } as const, true)
 
@@ -242,6 +244,7 @@ async function loadProject($: EngineInterface): Promise<void> {
  */
 async function applyScore($: EngineInterface, scored: Scored, generation: number): Promise<string[]> {
   if ((await read($, scoring)) !== generation) return []
+  await update($, isScoring, () => false)
   const { score, outcome } = scored
   await update($, seenLast, last => ({ ...last, score: score?.continues ? 'continues' : outcome }))
   // No score: a new task at the session's own effort. A message that goes on with the task under way keeps it.
@@ -433,6 +436,7 @@ export const register: Register = on => {
     // back within a moment still brings its notes with the prompt; a later one sends them as a row Claude reads next.
     const generation = (await read($, scoring)) + 1
     await update($, scoring, () => generation)
+    await update($, isScoring, () => true)
     // With a task under way, Haiku also reads what Claude said last, to tell an answer or a follow-up (which keeps the
     // task and its climbs) from new work. The task under way holds until the score says which.
     const under = await read($, task)
@@ -472,18 +476,25 @@ export const register: Register = on => {
         // The report misses one request.
       }
     }
-    if (e.agentId === undefined && isEffort(e.effort)) {
+    if (e.agentId === undefined) {
       try {
-        const carried = e.effort
-        if ((await read($, sessionEffort)) !== carried) await update($, sessionEffort, () => carried)
+        // The session's own effort: none on a model that takes none.
+        const carried = isEffort(e.effort) ? e.effort : null
+        if (carried && (await read($, sessionEffort)) !== carried) await update($, sessionEffort, () => carried)
         if ((await read($, sessionModel)) !== e.model) await update($, sessionModel, () => e.model)
         if (await read($, isOn)) {
-          const t = await read($, task)
+          // While a new prompt's score is on its way, the task under way is not yet known to go on: the request keeps
+          // the model the person chose for it, and leaves its climbs, Fable and effort aside for the session's own.
+          const under = await read($, task)
+          const t = (await read($, isScoring)) ? { ...FRESH_TASK, model: under.model, effort: carried } : under
           const runsOn = taskModel(t, e.model) ?? e.model
           const rung = rungOf(t, null, runsOn)
           // The task's model: the one the person chose for it, or Fable 5.1 once it climbed there.
           const model = rung?.isFable ? (isFable(runsOn) ? runsOn : FABLE_MODEL) : runsOn
-          if (rung) sent = { ...e, effort: rung.effort, ...(model !== e.model ? { model } : {}) }
+          // The rung's effort when the model takes efforts and the request carried one or moves to it; a model that
+          // takes none goes without, as it came.
+          const effort = rung && supportedEfforts(model).length > 0 && (carried || model !== e.model) ? rung.effort : null
+          if (model !== e.model || (effort && effort !== e.effort)) sent = { ...e, ...(effort ? { effort } : {}), ...(model !== e.model ? { model } : {}) }
         }
       } catch {
         // The request goes out as it came.
@@ -560,6 +571,8 @@ export const register: Register = on => {
     }
     const own = await read($, sessionEffort)
     const model = taskModel(await read($, task), await read($, sessionModel))
+    // A model that takes no effort has no ladder to climb: its checks change nothing.
+    if (supportedEfforts(model).length === 0) return ran
     const out = afterCheck(await read($, task), ran.isError !== true, own, model)
     await setTask($, () => out.task)
     if (out.hasClimbed) await update($, turnLog, (log): TurnLog => ({ ...log, climbs: log.climbs + 1 }))
