@@ -77,8 +77,11 @@ The mod never picks `max` by itself.
 |---|---|---|---|---|---|---|
 | Effort | `high` | `high` | `medium` | `high` | `xhigh` | `medium` |
 
-- The flow starts only when you choose it, when Claude asks, or when you type a stage's command.
-- Work you choose to do directly keeps the same care: when Claude uses one of the flow's skills on it (code-review, tdd), the task keeps at least that stage's effort and moves to the flow's model, for the rest of the task. The band shows it as "Matt's skill · direct".
+- The flow starts only when you choose it, when Claude asks, or when you type a stage's command. It ends when Claude says it is done, when you switch the Main Flow off, or with the first new work after retro.
+- Claude moves the flow from stage to stage with the `stage` tool. A stage's skill Claude uses on its own (a review of its own work during implement) only raises the effort: it does not move the flow.
+- Work you choose to do directly keeps the same care: when Claude uses one of the flow's skills on it (code-review, tdd), the task keeps at least that stage's effort and, while the Main Flow is on, moves to the flow's model, for the rest of the task. The band shows it as "Matt's skill · direct".
+- If you turn the flow or a stronger model down, you are not asked again this session for work no larger, or for a model no more capable.
+- Fable 5.1, once a climb reaches it in the flow, lasts until the next stage or ticket.
 - The flow runs on **Opus 5.5** by default. Pick **Fable 5.1** or **the session's model** in the pane.
 - Each ticket can set its own `Model:` and `Effort:`. A sub-agent given a ticket uses the model and effort the ticket sets.
 - Needs [Matt Pocock's skills](https://github.com/mattpocock/skills). The pane says which are missing.
@@ -89,7 +92,7 @@ The mod never picks `max` by itself.
   <img src="docs/images/sub-agents-en.png" width="820" alt="Which sub-agents each Main Flow stage starts, and how each gets its model and effort: implement hands a ticket to a sub-agent at the ticket's Model and Effort; code-review runs two reviewers at xhigh on the Main Flow's model; otherwise Explore runs on Haiku at low, Plan on the task's model at high, general-purpose on the task's model at the stage's effort, and your own types are left as they are">
 </p>
 
-A general-purpose sub-agent's effort follows the stage it runs in: the code-review reviewers run at `xhigh` because the review stage does. Plan and general-purpose sub-agents run on the task's model, so in the Main Flow they use its model (Opus 5.5 by default) even on a Sonnet session. Explore always runs on Haiku, and a ticket's sub-agent runs on the ticket's model.
+A general-purpose sub-agent's effort follows the stage it runs in: the code-review reviewers run at `xhigh` because the review stage does. Plan and general-purpose sub-agents run on the task's model, so in the Main Flow they use its model (Opus 5.5 by default) even on a Sonnet session. Explore always runs on Haiku, and a ticket's sub-agent runs on the ticket's model. A new sub-agent starts where the task started, not at a climb the main session made.
 
 ## Which model and effort, when
 
@@ -135,7 +138,7 @@ Open it with `/open-effort` or the band's **≡**.
 
 ### One model per task
 
-A task keeps one model from start to end, so the prompt cache holds. It changes only when you agree to a stronger model at the start, when it enters the Main Flow, when Claude uses one of the flow's skills on work you do directly, or when the effort goes past `xhigh` and it switches to Fable 5.1. It never switches to a weaker model by itself.
+A task keeps one model from start to end, so the prompt cache holds. It changes only when you agree to a stronger model at the start, when it enters the Main Flow, when Claude uses one of the flow's skills on work you do directly, or when the effort goes past `xhigh` and it switches to Fable 5.1. It never switches to a weaker model by itself, and moves to a stronger one you were offered only after Claude asked you.
 
 ### Models and effort
 
@@ -143,7 +146,7 @@ The current models take all five efforts. Opus and Sonnet 4.6 have no `xhigh`, O
 
 ### What counts as a check
 
-Test, typecheck, build and lint runs (JavaScript/TypeScript, Python, Go, Rust, Node's test runner, make). A check counts only when its result is the command's result: not after `;` or `||`, not piped without `set -o pipefail`, not in the background.
+Test, typecheck, build and lint runs (JavaScript/TypeScript, Python, Go, Rust, Node's test runner, make). A check counts only when its result is the command's result: not after `;` or `||`, not piped without `set -o pipefail`, not behind `!`, not in the background. The first failing run after Claude writes a test is the red step of test-first work, and does not count.
 
 ### Data and privacy
 
@@ -157,7 +160,9 @@ Test, typecheck, build and lint runs (JavaScript/TypeScript, Python, Go, Rust, N
 
 - The mod API is new in Claude Code and may change.
 - Switching a task's model starts its prompt cache afresh.
-- A slow Haiku reading arrives during the turn; until it does, requests use the session's own effort.
+- A slow Haiku reading arrives during the turn; until it does, requests use the session's own effort, on the task's model.
+- A command typed with words after it (`/fix-typo the title`) counts as a new request; a command alone keeps the task.
+- A resumed session starts with no task; the flow comes back when Claude names its stage.
 - If Haiku cannot read a message (it times out or fails), the message starts a new task at the session's own effort, even when it was a reply.
 - Ticket lines work with ticket files on disk (`<feature>/issues/NN-*.md`). Tickets kept in GitHub or Linear get none of this.
 - In the implement stage, each ticket file Claude reads sets the effort Claude works at: the mod takes it as the ticket Claude works next.
