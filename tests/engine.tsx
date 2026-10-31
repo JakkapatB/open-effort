@@ -1,5 +1,5 @@
 import type { Engine } from 'claude-code/testing'
-import type { CommandPresentation, ModelCompleteInput, ModelCompleteResult, On, PromptSubmitInput, TurnStepInput } from 'claude-code'
+import type { CommandPresentation, ModelCompleteInput, SessionMessage, ModelCompleteResult, On, PromptSubmitInput, TurnStepInput } from 'claude-code'
 
 // The test runtime has timers; the mod's own type settings leave them out.
 declare global {
@@ -58,6 +58,8 @@ export type EngineOptions = {
   matt?: readonly string[]
   /** What Claude said last in the main conversation, as `$.session.messages()` returns it. */
   said?: string
+  /** The conversation before that, oldest first: a resumed session's messages. */
+  history?: readonly SessionMessage[]
   /** How long Haiku takes to answer, in real milliseconds (default at once). */
   haikuDelayMs?: number
   /** The session's model, as `/model` shows it (default Opus 5.5). */
@@ -107,7 +109,9 @@ export function engine(on: On, options: EngineOptions = {}) {
   on('session.repo', () => ({ value: { root: where.cwd, remote: null, internal: false, name: null } }))
   on('session.root', () => ({ value: where.root }))
   on('session.model', () => ({ value: where.model }))
-  on('session.messages', () => ({ value: options.said ? [{ role: 'assistant' as const, text: options.said, toolUses: [] }] : [] }))
+  on('session.messages', () => ({
+    value: [...(options.history ?? []), ...(options.said ? [{ role: 'assistant' as const, text: options.said, toolUses: [] }] : [])],
+  }))
   on('ui.open', (_, e) => {
     opened.push(e.id)
     return { value: { isPlaced: true } }

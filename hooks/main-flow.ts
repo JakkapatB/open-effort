@@ -91,6 +91,15 @@ const HOW_TO_RUN = [
   `As you start each stage, call ${STAGE_TOOL} with its name (grill, spec, tickets, implement, review, retro); call it with "done" when the flow ends or the person drops it.`,
 ].join(' ')
 
+/** Sent when the person starts the Main Flow with a stage's own command: how to move on in it, and how to leave it. */
+export function flowStartedNote(stage: Stage): string {
+  return [
+    `[open-effort] The person typed the ${stage} stage's command, so Matt Pocock's Main Flow is on at that stage: requests run at its effort and on its model.`,
+    `If you go on to another stage, call ${STAGE_TOOL} with its name as you start it.`,
+    `Call ${STAGE_TOOL} with "done" once this stage's work is finished and the person did not ask for the rest of the flow, or when the person drops it; until then every request stays in the flow.`,
+  ].join('\n')
+}
+
 /** Sent with large or borderline work: Claude asks the person once, then runs the Main Flow if they choose it. */
 export const ASK_NOTE = [
   "[open-effort] This request asks for more than a small change. Before any work, ask the person once with AskUserQuestion whether to take it through Matt Pocock's Main Flow (grill, spec, tickets, implement, review, retro) or to do it directly. Put the option you recommend first, marked as recommended: recommend the Main Flow when the change spans several files, needs new tests, or touches auth, money or data.",

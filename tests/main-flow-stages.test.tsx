@@ -1,7 +1,7 @@
-import { expect, test } from 'claude-code/testing'
+import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
-import { BAND, MATT_SKILLS, bandText, engine, fail, finish, paneText, pressPane, request, start, type } from './engine'
+import { BAND, MATT_SKILLS, PANE, PRESENTATION, bandText, engine, fail, finish, paneText, pressPane, request, start, type } from './engine'
 
 const LARGE = 'clarity=unclear hard=no risky=no size=large'
 const SKILLS = '/Users/me/.claude/plugins/cache/mattpocock/mattpocock-skills/1.3.2/skills'
@@ -42,17 +42,18 @@ test('each stage the stage tool announces sets its own effort', async ($, on) =>
   expect(efforts).toEqual(STAGE_EFFORTS.map(([, effort]) => effort))
 })
 
-test('reading a stage skill’s SKILL.md moves a task in the flow to that stage', async ($, on) => {
+test('in the flow, reading a stage skill’s SKILL.md keeps the stage and never lowers the effort', async ($, on) => {
   const { sent } = await flow(on)
   await start($)
   await type($, 'add coupons to checkout')
   await stage($, 'grill')
   await $.tool.call({ tool: 'Read', file_path: `${SKILLS}/engineering/to-tickets/SKILL.md` })
 
-  expect(await effortNow($, sent)).toBe('medium')
+  expect(await effortNow($, sent)).toBe('high')
+  expect(await bandText($)).toContain('Main Flow: grill')
 })
 
-test('printing a stage skill’s SKILL.md in Bash moves a task in the flow to that stage', async ($, on) => {
+test('in the flow, printing a later stage’s SKILL.md raises the effort to that stage’s', async ($, on) => {
   const { sent } = await flow(on)
   await start($)
   await type($, 'add coupons to checkout')
@@ -62,14 +63,18 @@ test('printing a stage skill’s SKILL.md in Bash moves a task in the flow to th
   expect(await effortNow($, sent)).toBe('xhigh')
 })
 
-test('a stage skill Claude calls moves a task in the flow to that stage', async ($, on) => {
+test('a review Claude runs on its own work during implement raises the effort but keeps the implement stage', async ($, on) => {
   const { sent } = await flow(on)
   await start($)
   await type($, 'add coupons to checkout')
-  await stage($, 'grill')
-  await $.tool.call({ tool: 'Skill', skill: 'mattpocock-skills:to-tickets' })
+  await stage($, 'implement')
+  await $.tool.call({ tool: 'Skill', skill: 'mattpocock-skills:code-review' })
 
-  expect(await effortNow($, sent)).toBe('medium')
+  expect(await effortNow($, sent)).toBe('xhigh')
+  expect(await bandText($)).toContain('Main Flow: implement')
+  // The next stage the stage tool names starts at its own effort.
+  await stage($, 'retro')
+  expect(await effortNow($, sent, 1)).toBe('medium')
 })
 
 test('a stage command the person types sets the stage', async ($, on) => {
@@ -203,7 +208,7 @@ test('the flow ends when Claude announces done, and the next request is a new ta
   expect(await effortNow($, sent)).toBe('low')
 })
 
-test('the flow ends when the retro stage’s turn ends', async ($, on) => {
+test('after retro, new work ends the flow', async ($, on) => {
   const { sent, asked } = await flow(on, { haiku: [LARGE, 'clarity=clear hard=no risky=no size=small'] })
   await start($)
   await type($, 'add coupons to checkout')
@@ -356,4 +361,84 @@ test('a session on a model that takes no effort still moves to the frontier mode
     ['claude-sonnet-4-5', undefined],
     ['claude-opus-5-5', 'high'],
   ])
+})
+
+test('in retro, a reply to its proposals stays in the flow', async ($, on) => {
+  const { sent } = await flow(on, { haiku: [LARGE, 'clarity=clear hard=no risky=no size=small continue=yes'], said: 'Three changes I propose: 1, 2 and 3.' })
+  await start($)
+  await type($, 'add coupons to checkout')
+  await stage($, 'retro')
+  await request($, 'high')
+  await finish($)
+  await type($, 'apply 1 and 3')
+
+  expect(await effortNow($, sent, 1)).toBe('medium')
+  expect(await bandText($)).toContain('Main Flow: retro')
+})
+
+test('switching the Main Flow off in the pane ends a flow under way', async ($, on) => {
+  const { sent, asked } = await flow(on, { haiku: [LARGE, 'clarity=clear hard=no risky=no size=small'] })
+  await start($)
+  await type($, 'add coupons to checkout')
+  await stage($, 'implement')
+  await $.ui.mount({ ...PANE, surface: 'desktop' }).then(async ui => {
+    await ui.press({ key: 'flow-project-off' })
+    await ui.unmount()
+  })
+  await type($, 'rename a variable')
+
+  expect(asked.length).toBe(2)
+  expect(await effortNow($, sent)).toBe('low')
+})
+
+test('switching the mod off and on again does not bring back the old task', async ($, on) => {
+  const { sent } = await flow(on)
+  await start($)
+  await type($, 'add coupons to checkout')
+  await stage($, 'review')
+  await $.command.run({ command: 'open-effort', args: 'off', origin: { kind: 'composer' }, presentation: PRESENTATION })
+  await $.command.run({ command: 'open-effort', args: 'on', origin: { kind: 'composer' }, presentation: PRESENTATION })
+
+  // The session's own effort, no stage.
+  expect(await effortNow($, sent)).toBe('high')
+  expect(await bandText($)).not.toContain('Main Flow')
+})
+
+test('a flow the person starts with a stage command tells Claude how to leave it', async ($, on) => {
+  await flow(on)
+  const session = mock.session(on)
+  await start($)
+  await $.prompt.submit({ text: '/mattpocock-skills:code-review', command: { name: 'mattpocock-skills:code-review', args: '' }, wait: false, origin: { kind: 'composer' } })
+
+  const notes = session.appended().map(row => JSON.stringify(row.message)).join('\n')
+  expect(notes).toContain('mcp__open-effort__stage')
+  expect(notes).toContain('done')
+})
+
+test('in a resumed session, the stage tool brings back the flow the conversation shows under way', async ($, on) => {
+  const { sent } = await flow(on, { history: [{ role: 'assistant', text: 'On to implement.', toolUses: [{ tool_use_id: 'tu-1', tool: 'mcp__open-effort__stage', input: { stage: 'implement' } }] }] })
+  await start($)
+  await stage($, 'review')
+
+  expect(await effortNow($, sent)).toBe('xhigh')
+})
+
+test('a stage tool call with no flow asked about and none in the conversation still changes nothing', async ($, on) => {
+  const { sent } = await flow(on, { haiku: 'clarity=clear hard=no risky=no size=small', history: [{ role: 'assistant', text: 'Done.', toolUses: [{ tool_use_id: 'tu-1', tool: 'mcp__open-effort__stage', input: { stage: 'done' } }] }] })
+  await start($)
+  await type($, 'rename a variable')
+  await stage($, 'review')
+
+  expect(await effortNow($, sent)).toBe('low')
+})
+
+test('with the Main Flow switched off, a stage skill on direct work raises the effort but keeps the model', async ($, on) => {
+  const { sent } = await flow(on, { haiku: 'clarity=clear hard=no risky=no size=small', model: 'claude-sonnet-5-5', store: { mainFlow: false } })
+  await start($)
+  await request($, 'high', 0, 'claude-sonnet-5-5')
+  await type($, 'fix the coupon rounding')
+  await $.tool.call({ tool: 'Skill', skill: 'mattpocock-skills:tdd' })
+  await request($, 'high', 1, 'claude-sonnet-5-5')
+
+  expect(sent.at(-1)).toMatchObject({ model: 'claude-sonnet-5-5', effort: 'high' })
 })
