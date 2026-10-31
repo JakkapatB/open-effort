@@ -5,8 +5,8 @@
 <h1 align="center">open-effort</h1>
 
 <p align="center">
-  ให้ Claude คิดหนักเท่าที่งานต้องการ ไม่มากไป ไม่น้อยไป<br>
-  mod ของ Claude Code ที่ปรับ effort ให้พอดีกับงาน และเปลี่ยนไปใช้โมเดลที่เก่งกว่าเฉพาะตอนจำเป็น
+  ให้ Claude ใช้ effort ให้เหมาะกับงาน ไม่ต้องคอยปรับเอง<br>
+  mod สำหรับ Claude Code ที่เลือก effort ให้ตามงาน และเปลี่ยนไปใช้โมเดลที่เก่งกว่าเมื่อจำเป็นเท่านั้น
 </p>
 
 <p align="center">
@@ -14,20 +14,20 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/band.png" width="760" alt="แถบเหนือช่องพิมพ์: สิ่งที่ Haiku อ่าน, effort ที่ไต่ขึ้นเป็น high บน Opus 5.5 และ sub-agent 3 ตัวที่กำลังทำงาน">
+  <img src="docs/images/band.png" width="760" alt="แถบเหนือช่องแชท แสดงผลที่ Haiku ประเมิน, effort ที่เพิ่มเป็น high บน Opus 5.5 และ sub-agent 3 ตัวที่กำลังทำงาน">
 </p>
 
-## ทำอะไรได้
+## ฟีเจอร์
 
-- 🎯 **effort พอดีกับงาน:** Haiku อ่านงานใหม่แต่ละครั้ง แผนชัดเริ่มที่ `low` งานยากเริ่มที่ `xhigh`
-- 📈 **ไต่ขึ้นเมื่องานติด:** check ไม่ผ่าน 3 ครั้งติด effort จะขึ้นทีละขั้น จนไป Fable 5.1 แล้วถามคุณ
-- 🧠 **เลือกโมเดล โดยถามคุณก่อน:** งานที่ต้องใช้โมเดลที่เก่งกว่า จะถามคุณครั้งเดียวก่อนเปลี่ยน
-- 🗺️ **ใช้ Main Flow ของ Matt Pocock ได้:** ตั้งแต่ grill ถึง retro แต่ละขั้นและแต่ละ ticket มี effort ของตัวเอง
-- 👀 **บอกเหตุผลให้เห็น:** มีแถบเหนือช่องพิมพ์ และ pane ที่มีสวิตช์ ธีมสี และประวัติ
+- 🎯 **เลือก effort ให้อัตโนมัติ:** Haiku จะดูงานที่คุณสั่งก่อน งานง่ายใช้ `low` งานยากใช้ `xhigh`
+- 📈 **งานติดก็เพิ่ม effort ให้เอง:** ถ้า test หรือ lint ไม่ผ่านติดกัน 3 ครั้ง จะเพิ่ม effort ทีละระดับ ถ้ายังไม่ผ่านจะสลับไปใช้ Fable 5.1 และสุดท้ายจะหยุดถามคุณ
+- 🧠 **ถามก่อนเปลี่ยนโมเดล:** ถ้างานควรใช้โมเดลที่เก่งกว่า Claude จะถามคุณก่อนหนึ่งครั้ง
+- 🗺️ **รองรับ Main Flow ของ Matt Pocock:** ตั้งแต่ grill จนถึง retro แต่ละขั้นตอนและแต่ละ ticket ใช้ effort ที่ต่างกันได้
+- 👀 **เห็นตลอดว่าใช้อะไรอยู่:** แถบเหนือช่องแชทบอก effort โมเดล และเหตุผล ส่วน pane ด้านข้างไว้เปิดปิด เปลี่ยนธีม และดูประวัติ
 
 ## ติดตั้ง
 
-**แอป desktop:** **+** ข้างช่องพิมพ์ → **Plugins** → **Add marketplace** → `JakkapatB/open-effort` → **Add plugin**
+**แอป desktop:** กด **+** ข้างช่องแชท → **Plugins** → **Add marketplace** → ใส่ `JakkapatB/open-effort` → **Add plugin**
 
 **terminal:**
 
@@ -35,108 +35,108 @@
 /plugin install open-effort --marketplace JakkapatB/open-effort
 ```
 
-ไม่ต้องตั้งค่าอะไร ติดตั้งเสร็จแถบขึ้นทันที
+ติดตั้งเสร็จใช้ได้เลย ไม่ต้องตั้งค่าเพิ่ม
 
-## ทำงานยังไง
+## หลักการทำงาน
 
 <p align="center">
-  <img src="docs/images/flow-th.png" width="760" alt="คุณพิมพ์งาน, Haiku อ่านงาน, Claude ถามเรื่องงานใหญ่หรือโมเดลที่เก่งกว่า, Claude ทำงานที่ effort เริ่มต้น และ check ไม่ผ่าน 3 ครั้งติดจะไต่ขึ้นหนึ่งขั้น">
+  <img src="docs/images/flow-th.png" width="760" alt="คุณสั่งงาน, Haiku ดูงาน, ถ้างานใหญ่หรือควรใช้โมเดลที่เก่งกว่า Claude จะถามก่อน, Claude เริ่มทำงานด้วย effort ที่เลือกไว้, ถ้า test ไม่ผ่านติดกัน 3 ครั้งจะเพิ่ม effort อีกระดับ">
 </p>
 
-### บันได effort
+### ลำดับการเพิ่ม effort
 
 <p align="center">
-  <img src="docs/images/ladder-th.png" width="640" alt="low, medium, high, xhigh แล้ว Fable 5.1 ที่ high, xhigh, max แล้ว Claude ถามคุณ">
+  <img src="docs/images/ladder-th.png" width="640" alt="low, medium, high, xhigh แล้วสลับไป Fable 5.1 ที่ high, xhigh, max ถ้ายังไม่ผ่าน Claude จะถามคุณ">
 </p>
 
-check ผ่านเมื่อไหร่ effort กลับไปที่เดิม
+พอ test ผ่าน effort จะกลับไปเท่าเดิม
 
 <p align="center">
-  <img src="docs/images/states-th.png" width="760" alt="แถบในแต่ละสถานะ: ได้คะแนน, check ไม่ผ่าน, ไต่ขึ้น, Fable 5.1 และหยุดที่สุดบันได">
+  <img src="docs/images/states-th.png" width="760" alt="หน้าตาของแถบในแต่ละสถานะ: เลือก effort แล้ว, test ไม่ผ่าน, เพิ่ม effort, สลับไป Fable 5.1 และหยุดถามคุณ">
 </p>
 
 ### effort เริ่มต้น
 
-| Haiku อ่านได้ว่า | effort |
+| Haiku ประเมินว่า | effort |
 |---|---|
-| แผนชัด (เปลี่ยนชื่อ, ทำตามแบบที่รู้อยู่แล้ว) | `low` |
-| รู้เป้าหมาย แต่ต้องคิดวิธี | `medium` |
-| แผนยังไม่ชัด | `high` |
-| ยากพิเศษ (concurrency, ย้ายข้อมูล) | `xhigh` |
-| เสี่ยง หรือ Haiku ไม่แน่ใจ | อย่างน้อย `medium` |
+| รู้ชัดว่าต้องทำอะไร (เช่น เปลี่ยนชื่อ, ทำตามแบบที่มีอยู่แล้ว) | `low` |
+| รู้เป้าหมาย แต่ต้องคิดวิธีทำ | `medium` |
+| ยังไม่รู้ชัดว่าจะทำยังไง | `high` |
+| ยากเป็นพิเศษ (เช่น concurrency, ย้ายข้อมูล) | `xhigh` |
+| มีความเสี่ยง หรือ Haiku ไม่มั่นใจ | ไม่ต่ำกว่า `medium` |
 
-mod ไม่เลือก `max` เอง
+mod จะไม่เลือก `max` ให้เอง
 
 ### Main Flow ของ Matt Pocock
 
 <p align="center">
-  <img src="docs/images/main-flow.png" width="760" alt="เส้น Main Flow ที่ stage implement กำลังทำ ticket 03 ที่ high">
+  <img src="docs/images/main-flow.png" width="760" alt="Main Flow อยู่ที่ขั้นตอน implement กำลังทำ ticket 03 ด้วย effort high">
 </p>
 
-| stage | grill | spec | tickets | implement | review | retro |
+| ขั้นตอน | grill | spec | tickets | implement | review | retro |
 |---|---|---|---|---|---|---|
 | effort | `high` | `high` | `medium` | `high` | `xhigh` | `medium` |
 
-- flow ใช้ **Opus 5.5** เป็นค่าเริ่มต้น เปลี่ยนเป็น **Fable 5.1** หรือ **โมเดลของ session** ได้ใน pane
-- แต่ละ ticket มี `Model:` และ `Effort:` ของตัวเอง sub-agent ที่ทำ ticket ใช้ทั้งสองค่า
-- ต้องติดตั้ง [skill ของ Matt Pocock](https://github.com/mattpocock/skills) pane จะบอกว่าขาดตัวไหน
+- Main Flow ใช้ **Opus 5.5** เป็นค่าเริ่มต้น เปลี่ยนเป็น **Fable 5.1** หรือใช้ **โมเดลเดียวกับ session** ได้ใน pane
+- แต่ละ ticket กำหนด `Model:` และ `Effort:` ของตัวเองได้ ถ้าส่งให้ sub-agent ทำ จะใช้ค่าตาม ticket
+- ต้องติดตั้ง [skill ของ Matt Pocock](https://github.com/mattpocock/skills) ก่อน ถ้ายังไม่ครบ pane จะบอกว่าขาดตัวไหน
 
-## pane
+## Pane
 
-เปิดด้วย `/open-effort` หรือกด **≡** บนแถบ
+เปิดด้วยคำสั่ง `/open-effort` หรือกดปุ่ม **≡** บนแถบ
 
 <p align="center">
-  <img src="docs/images/history.png" width="520" alt="กราฟประวัติ: effort ที่แต่ละ turn เริ่มและไต่ขึ้นไป และจำนวน turn แยกตามโมเดลกับ effort">
+  <img src="docs/images/history.png" width="520" alt="กราฟประวัติ แสดง effort ตอนเริ่มและตอนที่เพิ่มขึ้นของแต่ละ turn และจำนวน turn แยกตามโมเดลกับ effort">
 </p>
 
-- **เปิดหรือปิด** ในโปรเจกต์นี้ (`/open-effort on|off` ได้ผลเหมือนกัน)
-- **Main Flow:** เปิดหรือปิด และเลือกโมเดล
+- **เปิด/ปิด** สำหรับโปรเจกต์นี้ (หรือพิมพ์ `/open-effort on` / `off`)
+- **Main Flow:** เปิด/ปิด และเลือกโมเดลที่จะใช้
 - **ภาษา:** อัตโนมัติ, ไทย หรือ English
-- **ธีมสี:** Claude, มะนาว, ฟ้า หรือชมพู
+- **ธีมสี:** Claude, Lime, Ocean หรือ Rose
 - **ประวัติ:** 500 turn ล่าสุดของโปรเจกต์
 
 <p align="center">
-  <img src="docs/images/themes.png" width="640" alt="4 ธีม: Claude, Lime, Ocean และ Rose">
+  <img src="docs/images/themes.png" width="640" alt="ธีมสี 4 แบบ: Claude, Lime, Ocean และ Rose">
 </p>
 
 <details>
 <summary><b>รายละเอียดเพิ่มเติม</b></summary>
 
-### หนึ่งงาน หนึ่งโมเดล
+### งานหนึ่งใช้โมเดลเดียว
 
-งานหนึ่งใช้โมเดลเดียวตั้งแต่ต้นจนจบ เพื่อให้ prompt cache ไม่เสีย โมเดลเปลี่ยนเฉพาะตอนคุณตกลงใช้โมเดลที่เก่งกว่าตอนเริ่มงาน, ตอนเข้า Main Flow หรือตอนไต่เกิน `xhigh` ไป Fable 5.1 และไม่ลดลงเอง
+งานหนึ่งจะใช้โมเดลเดิมตั้งแต่ต้นจนจบ เพื่อไม่ให้ prompt cache หาย โมเดลจะเปลี่ยนแค่ 3 กรณี คือ คุณตกลงเปลี่ยนตอนเริ่มงาน, ตอนเริ่ม Main Flow และตอนที่ effort เกิน `xhigh` จนต้องสลับไป Fable 5.1 และจะไม่ลดโมเดลลงเอง
 
 ### โมเดลกับ effort
 
-โมเดลรุ่นปัจจุบันรองรับ effort ครบ 5 ระดับ Opus และ Sonnet 4.6 ไม่มี `xhigh`, Opus 4.5 สูงสุดที่ `high` ส่วน Sonnet 4.5 และ Haiku 4.5 ไม่รองรับ effort ระดับที่โมเดลไม่รองรับจะใช้ระดับรองลงมาแทน
+โมเดลรุ่นปัจจุบันรองรับ effort ครบทั้ง 5 ระดับ ส่วน Opus และ Sonnet 4.6 ไม่มี `xhigh`, Opus 4.5 สูงสุดแค่ `high` และ Sonnet 4.5 กับ Haiku 4.5 ไม่รองรับ effort เลย ถ้าโมเดลไม่รองรับระดับไหน จะใช้ระดับที่ต่ำกว่าถัดลงมาแทน
 
-### อะไรนับเป็น check
+### คำสั่งแบบไหนที่นับ
 
-test, typecheck, build และ lint (JavaScript/TypeScript, Python, Go, Rust, test runner ของ Node, make) นับเฉพาะเมื่อผลของ check คือผลของทั้งคำสั่ง ไม่นับเมื่อต่อด้วย `;` หรือ `||`, ส่งต่อผ่าน `|` โดยไม่มี `set -o pipefail` หรือรันเบื้องหลัง
+นับ test, typecheck, build และ lint (JavaScript/TypeScript, Python, Go, Rust, test ของ Node และ make) โดยนับเฉพาะเมื่อผลของคำสั่งนั้นเป็นผลสุดท้ายของทั้งบรรทัด ถ้ามี `;` หรือ `||` ต่อท้าย, ส่งต่อด้วย `|` โดยไม่ได้ตั้ง `set -o pipefail` หรือรันเป็น background จะไม่นับ
 
 ### sub-agent
 
 | sub-agent | โมเดล · effort |
 |---|---|
 | Explore | Haiku · `low` |
-| Plan | โมเดลของ session · `high` |
-| general-purpose | โมเดลของ session · effort เท่างานหลัก |
-| แบบที่คุณสร้างเอง | ไม่แตะ |
+| Plan | โมเดลเดียวกับ session · `high` |
+| general-purpose | โมเดลเดียวกับ session · effort เท่ากับงานหลัก |
+| แบบที่คุณสร้างเอง | ไม่ไปยุ่ง |
 
 ### ข้อมูลและความเป็นส่วนตัว
 
-- ทุกอย่างเก็บใน plugin store ของ Claude Code ในเครื่องคุณ
-- ประวัติไม่เก็บข้อความที่คุณพิมพ์ เก็บแค่เวลา, effort, ผลการอ่าน, จำนวนครั้ง และชื่อโมเดล
-- mod ไม่เรียกเครือข่ายเอง เรียกโมเดลอย่างเดียวคือให้ Haiku อ่านงานใหม่ (พร้อมท้ายข้อความล่าสุดของ Claude เมื่อมีงานค้าง) หรืออ่าน ticket ที่ไม่มีบรรทัด `Model:` และ `Effort:` ผ่าน Claude Code
-- อ่านไฟล์เฉพาะ ticket (`<feature>/issues/NN-*.md`) ใน stage implement และไม่เขียนไฟล์ใดๆ
-- เพิ่มข้อความถึง Claude ในบทสนทนา และลงทะเบียน tool 3 ตัว คือ `stage`, `model` และ `report`
+- ข้อมูลทั้งหมดเก็บไว้ในเครื่องคุณ ใน plugin store ของ Claude Code
+- ประวัติไม่ได้เก็บข้อความที่คุณพิมพ์ เก็บแค่เวลา, effort, ผลประเมิน, จำนวนครั้ง และชื่อโมเดล
+- mod ไม่ได้ส่งข้อมูลออกไปไหนเอง สิ่งเดียวที่ส่งคือให้ Haiku ประเมินงานใหม่ (รวมข้อความท้ายๆ ของ Claude ถ้ามีงานค้างอยู่) หรือประเมิน ticket ที่ไม่ได้ระบุ `Model:` และ `Effort:` ซึ่งส่งผ่าน Claude Code ตามปกติ
+- อ่านไฟล์แค่ ticket (`<feature>/issues/NN-*.md`) ตอนอยู่ในขั้นตอน implement และไม่เขียนไฟล์ใดๆ
+- จะเพิ่มข้อความแนะนำให้ Claude ในแชท และเพิ่ม tool 3 ตัว คือ `stage`, `model` และ `report`
 
 ### ข้อจำกัด
 
-- API ของ mod ยังใหม่ใน Claude Code และอาจเปลี่ยนได้
-- เปลี่ยนโมเดลของงาน ทำให้ prompt cache ของงานนั้นเริ่มใหม่
-- ถ้า Haiku อ่านช้า คะแนนจะมาระหว่าง turn request แรกๆ จึงใช้ effort ของ session
-- ข้อความที่ส่งถึง Claude เป็นคำแนะนำ mod ไม่ได้บังคับ
+- API สำหรับ mod ของ Claude Code ยังใหม่อยู่ อาจมีการเปลี่ยนแปลง
+- ถ้าเปลี่ยนโมเดลของงาน prompt cache ของงานนั้นจะต้องเริ่มใหม่
+- ถ้า Haiku ตอบช้า request แรกๆ ของ turn นั้นจะใช้ effort ของ session ไปก่อน
+- ข้อความที่ส่งให้ Claude เป็นแค่คำแนะนำ ไม่ได้บังคับ
 
 </details>
 
@@ -148,14 +148,14 @@ claude plugin test .
 claude plugin validate .
 ```
 
-ดูตารางโครงสร้างโค้ดได้ใน [README ภาษาอังกฤษ](README.md) พัฒนาและทดสอบบน Claude Code 2.1.308
+โครงสร้างโค้ดดูได้ที่ [README ภาษาอังกฤษ](README.md) พัฒนาและทดสอบบน Claude Code 2.1.308
 
 </details>
 
 ## เครดิต
 
-Main Flow และ skill เป็นของ [Matt Pocock](https://github.com/mattpocock/skills) (MIT) open-effort ไม่ได้เกี่ยวข้องกับ Matt Pocock หรือ Anthropic
+Main Flow และ skill เป็นผลงานของ [Matt Pocock](https://github.com/mattpocock/skills) (MIT) โปรเจกต์นี้ไม่ได้เกี่ยวข้องกับ Matt Pocock หรือ Anthropic
 
-## ไลเซนส์
+## License
 
 [MIT](LICENSE)
