@@ -81,6 +81,9 @@ export type SubAgent = {
 /** What a ticket names for itself: its `Model:` and `Effort:` lines, or Haiku's reading of it when it has none. */
 export type TicketSetting = { tier?: ModelTier; effort: Effort }
 
+/** What the person turned down this session: the largest work done without the Main Flow, the model kept instead. */
+export type Declined = { flow: Size | null; model: ModelTier | null }
+
 /** The language picked in the pane; auto follows Claude Code's own setting. */
 export type LanguageChoice = 'auto' | Language
 
@@ -148,6 +151,14 @@ declare module 'claude-code' {
       canView: boolean
       /** Whether a prompt's score is still on its way: its requests go out at the session's own effort meanwhile. */
       isScoring: boolean
+      /** The task as it stood when the prompt being scored was typed. */
+      before: Task
+      /** What the person turned down this session: the Main Flow for work of a size, a model. */
+      declined: Declined
+      /** Whether the main session's turn is running. */
+      isTurnRunning: boolean
+      /** How many messages the conversation held when the mod offered a model. */
+      offerAt: number
       /** The Main Flow skills this session lacks; empty when Matt Pocock's skills are installed. */
       missing: string[]
       turnLog: TurnLog

@@ -1,4 +1,4 @@
-import type { Clarity, Effort, ModelTier, Rung, Score, Stage, SubAgent, Task, TicketSetting } from '../types'
+import type { Clarity, Effort, ModelTier, Rung, Score, Size, Stage, SubAgent, Task, TicketSetting } from '../types'
 import { MODEL_TIERS as TIERS, isUnsure } from './score'
 
 export const EFFORTS: readonly Effort[] = ['low', 'medium', 'high', 'xhigh', 'max']
@@ -38,6 +38,23 @@ export function modelUp(named: ModelTier | undefined, sessionModel: string | nul
   const own = tierOf(sessionModel)
   if (!named || own === null) return null
   return TIERS.indexOf(named) > TIERS.indexOf(own) ? named : null
+}
+
+/** Whether a model family is no more capable than another. */
+export function isTierAtMost(tier: ModelTier, than: ModelTier): boolean {
+  return TIERS.indexOf(tier) <= TIERS.indexOf(than)
+}
+
+const SIZES: readonly Size[] = ['none', 'small', 'borderline', 'large']
+
+/** Whether work of a size is no larger than another. */
+export function isSizeAtMost(size: Size, than: Size): boolean {
+  return SIZES.indexOf(size) <= SIZES.indexOf(than)
+}
+
+/** The larger of two sizes; `a` absent, `b`. */
+export function largerSize(a: Size | null, b: Size): Size {
+  return a && SIZES.indexOf(a) > SIZES.indexOf(b) ? a : b
 }
 
 /** The model a task runs on: the one the person chose for it, else the session's. */

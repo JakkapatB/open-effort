@@ -442,3 +442,24 @@ test('with the Main Flow switched off, a stage skill on direct work raises the e
 
   expect(sent.at(-1)).toMatchObject({ model: 'claude-sonnet-5-5', effort: 'high' })
 })
+
+test('work the person chose to do without the flow is not asked about again this session, unless it is larger', async ($, on) => {
+  const { submitted } = await flow(on, { haiku: ['clarity=goal hard=no risky=no size=borderline', 'clarity=goal hard=no risky=no size=borderline', 'clarity=unclear hard=no risky=no size=large'] })
+  await start($)
+  await type($, 'add a coupon field and validate it on the server')
+  await type($, 'also add a discount field and validate it')
+  expect(JSON.stringify(submitted.at(-1)?.context ?? '')).not.toContain('Main Flow')
+  await type($, 'rebuild checkout with coupons, gift cards and refunds')
+  expect(JSON.stringify(submitted.at(-1)?.context ?? '')).toContain('Main Flow')
+})
+
+test('a flow the person starts while a score is on its way stays when the score comes', async ($, on) => {
+  const { sent } = await flow(on, { haiku: 'clarity=clear hard=no risky=no size=small sure=90', haikuDelayMs: 1300 })
+  await start($)
+  await type($, 'rename a variable')
+  await $.prompt.submit({ text: '/mattpocock-skills:to-spec', command: { name: 'mattpocock-skills:to-spec', args: '' }, wait: false, origin: { kind: 'composer' } })
+  await new Promise(resolve => setTimeout(resolve, 300))
+
+  expect(await effortNow($, sent)).toBe('high')
+  expect(await bandText($)).toContain('Main Flow: spec')
+})

@@ -41,8 +41,8 @@ export const SURFACES = ['terminal', 'desktop'] as const
 
 const USAGE = { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }
 
-/** How Haiku answers a score: its reply text, or a call that times out or fails. */
-export type Haiku = string | 'timeout' | 'fail'
+/** How Haiku answers a score: its reply text, or a call that times out, fails, or throws. */
+export type Haiku = string | 'timeout' | 'fail' | 'throw'
 
 /** The six Main Flow skills, as the mattpocock-skills plugin lists them among the session's commands. */
 export const MATT_SKILLS = ['grill-with-docs', 'to-spec', 'to-tickets', 'implement', 'code-review', 'retro']
@@ -109,8 +109,10 @@ export function engine(on: On, options: EngineOptions = {}) {
   on('session.repo', () => ({ value: { root: where.cwd, remote: null, internal: false, name: null } }))
   on('session.root', () => ({ value: where.root }))
   on('session.model', () => ({ value: where.model }))
+  // The conversation as the session holds it: the options' history, what Claude said last, then what a test adds.
+  const conversation: SessionMessage[] = []
   on('session.messages', () => ({
-    value: [...(options.history ?? []), ...(options.said ? [{ role: 'assistant' as const, text: options.said, toolUses: [] }] : [])],
+    value: [...(options.history ?? []), ...(options.said ? [{ role: 'assistant' as const, text: options.said, toolUses: [] }] : []), ...conversation],
   }))
   on('ui.open', (_, e) => {
     opened.push(e.id)
@@ -167,6 +169,7 @@ export function engine(on: On, options: EngineOptions = {}) {
     asked.push(e)
     if (options.haikuDelayMs) await new Promise(resolve => setTimeout(resolve, options.haikuDelayMs))
     const haiku = replies[Math.min(asked.length, replies.length) - 1]
+    if (haiku === 'throw') throw new Error('network down')
     if (haiku === 'timeout') return { value: { isAnswered: false, reason: 'aborted', usage: USAGE } }
     if (haiku === 'fail') return { value: { isAnswered: false, reason: 'api-error', status: 529, error: 'overloaded', usage: USAGE } }
     return { value: { isAnswered: true, text: haiku ?? '', usage: USAGE } }
@@ -194,7 +197,7 @@ export function engine(on: On, options: EngineOptions = {}) {
     calls.push(e as Record<string, unknown>)
     return bash.passes ? { result: {}, text: 'ok' } : { result: {}, text: 'Exit code 1', isError: true }
   })
-  return { sent, asked, submitted, bash, opened, written, clock, calls, spawned, viewed, where, store }
+  return { sent, asked, submitted, bash, opened, written, clock, calls, spawned, viewed, where, store, conversation }
 }
 
 export const DAY_MS = 24 * 60 * 60 * 1000
