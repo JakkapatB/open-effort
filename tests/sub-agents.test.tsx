@@ -28,7 +28,7 @@ test('a Plan sub-agent runs on the session model at high', async ($, on) => {
   expect(await spawn($, calls, { subagent_type: 'Plan' })).toEqual({ model: undefined, effort: 'high' })
 })
 
-test('a general-purpose sub-agent runs at the main session’s current effort', async ($, on) => {
+test('a general-purpose sub-agent starts at the task’s starting effort, not at the main session’s climb', async ($, on) => {
   const { calls, bash } = engine(on, { haiku: GOAL })
   await start($)
   await type($, 'add a coupon field')
@@ -37,7 +37,30 @@ test('a general-purpose sub-agent runs at the main session’s current effort', 
   expect(await spawn($, calls, { subagent_type: 'general-purpose' })).toEqual({ model: undefined, effort: 'medium' })
 
   await fail($, bash)
-  expect(await spawn($, calls, {})).toEqual({ model: undefined, effort: 'high' })
+  expect(await spawn($, calls, {})).toEqual({ model: undefined, effort: 'medium' })
+})
+
+test('after the main session climbed to Fable 5.1, a new sub-agent still starts on the task’s model', async ($, on) => {
+  const { calls, bash } = engine(on, { haiku: 'clarity=clear hard=yes risky=no size=small' })
+  await start($)
+  await type($, 'fix the race in the cart lock')
+  await request($, 'high')
+  await fail($, bash)
+
+  expect(await spawn($, calls, {})).toEqual({ model: undefined, effort: 'xhigh' })
+})
+
+test('a sub-agent that wrote a test does not count its first failing run', async ($, on) => {
+  const { sent, bash } = engine(on, { haiku: GOAL })
+  await start($)
+  await type($, 'add a coupon field')
+  await agentRequest($, 'a1', 'medium', 0)
+  await $.tool.call({ tool: 'Write', file_path: 'src/coupon.test.ts', content: 'test', agentId: 'a1' } as never)
+  await fail($, bash, 3, 'npm test', 'a1')
+  await agentRequest($, 'a1', 'medium', 1)
+
+  // Three failures, the first the red step: two counted, no climb.
+  expect(sent.filter(e => e.agentId === 'a1').map(e => e.effort)).toEqual(['medium', 'medium'])
 })
 
 test('an Agent call that names a model or an effort is left as it is', async ($, on) => {

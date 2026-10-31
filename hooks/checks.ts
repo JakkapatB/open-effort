@@ -26,6 +26,11 @@ function runsCheck(part: string): boolean {
   return CHECKS.some(check => check.test(bare))
 }
 
+/** A test file by its path: `x.test.ts`, `x_test.go`, `test_x.py`, or any file under `tests/`, `__tests__/` or `spec/`. */
+export function isTestFile(path: string): boolean {
+  return /(^|\/)(tests?|__tests__|spec)\/|[._-](test|spec)\.[a-z0-9]+$|(^|\/)test_[^/]+\.py$/i.test(path)
+}
+
 /** Whether a statement negates its exit, `! npm test`: its pass is the check's failure. */
 function isNegated(statement: string): boolean {
   return /^[({\s]*!\s/.test(statement)

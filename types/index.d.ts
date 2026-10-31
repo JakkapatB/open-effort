@@ -76,6 +76,8 @@ export type SubAgent = {
   tier?: ModelTier
   /** The model its last request went out on; absent until one is seen. */
   model?: string
+  /** Whether it wrote a test since its last check: the next failing check is the red step, not a stall. */
+  isRed?: boolean
 }
 
 /** What a ticket names for itself: its `Model:` and `Effort:` lines, or Haiku's reading of it when it has none. */
@@ -159,6 +161,10 @@ declare module 'claude-code' {
       isTurnRunning: boolean
       /** How many messages the conversation held when the mod offered a model. */
       offerAt: number
+      /** Whether the main session wrote a test since its last check. */
+      isRed: boolean
+      /** Haiku's readings of tickets without Model and Effort lines, by path, with the text read. */
+      ticketReads: Record<string, { text: string; setting: TicketSetting }>
       /** The Main Flow skills this session lacks; empty when Matt Pocock's skills are installed. */
       missing: string[]
       turnLog: TurnLog

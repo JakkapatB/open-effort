@@ -2,7 +2,7 @@ import type { TurnStepInput } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
-import { MATT_SKILLS, engine, request, run, spawn, start, type } from './engine'
+import { MATT_SKILLS, engine, fail, request, run, spawn, start, type } from './engine'
 
 const LARGE = 'clarity=unclear hard=no risky=no size=large sure=90'
 const T3 = 'work/coupons/issues/03-coupon-rules.md'
@@ -167,4 +167,26 @@ test('two hand-offs under one description each keep their own ticket', async ($,
 
   expect(sent.filter(e => e.agentId === a).map(e => e.effort)).toEqual(['high', 'xhigh'])
   expect(sent.filter(e => e.agentId === b).map(e => e.effort)).toEqual(['low', 'medium'])
+})
+
+test('a ticket with no Model line, handed out after the main session climbed to Fable 5.1, runs on the task’s model', async ($, on) => {
+  const { calls, bash } = engine(on, { haiku: LARGE, matt: MATT_SKILLS, files: FILES })
+  await implementing($)
+  // implement's high, then xhigh, then Fable 5.1.
+  await fail($, bash)
+  await fail($, bash)
+  await $.tool.call({ tool: 'Agent', tool_use_id: 'tu-4', description: 'ticket 04', prompt: `Implement ${T4}.` } as never)
+
+  const agentCall = calls.find(c => c.tool === 'Agent')
+  expect([agentCall?.model, agentCall?.effort]).toEqual([undefined, 'low'])
+})
+
+test('Haiku reads a ticket without lines once, while its text stays the same', async ($, on) => {
+  const { asked } = engine(on, { haiku: [LARGE, 'clarity=clear hard=no risky=no size=small model=sonnet sure=90'], matt: MATT_SKILLS, files: FILES })
+  await implementing($)
+  await $.tool.call({ tool: 'Read', file_path: 'work/coupons/issues/05-unlabelled.md' } as never)
+  await $.tool.call({ tool: 'Read', file_path: T3 } as never)
+  await $.tool.call({ tool: 'Read', file_path: 'work/coupons/issues/05-unlabelled.md' } as never)
+
+  expect(asked.length).toBe(2)
 })

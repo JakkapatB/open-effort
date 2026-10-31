@@ -125,8 +125,8 @@ export const STAGE_EFFORT: Readonly<Record<Stage, Effort>> = {
 }
 
 /**
- * A task moved to a Main Flow stage: the stage's effort, with the last stage's climb left behind; its score and
- * Fable 5.1, once reached, stay.
+ * A task moved to a Main Flow stage: the stage's effort, with the last stage's climb left behind, Fable 5.1 a climb
+ * reached included (a flow that runs on Fable keeps it); its score stays.
  */
 export function enteredStage(task: Task, stage: Stage): Task {
   return {
@@ -134,6 +134,7 @@ export function enteredStage(task: Task, stage: Stage): Task {
     stage,
     effort: STAGE_EFFORT[stage],
     climbed: null,
+    isOnFable: isFable(task.model),
     fails: 0,
     isAtLadderEnd: false,
     ticket: null,
@@ -148,9 +149,12 @@ export function enteredStage(task: Task, stage: Stage): Task {
 export function usedStageSkill(task: Task, stage: Stage, own: Effort | null, model: string | null): Task {
   const floor = STAGE_EFFORT[stage]
   const effort = atLeast(task.effort ?? own ?? floor, floor)
+  // A climb that stands below the new effort is left behind; one above it, or on Fable 5.1, stays.
+  const isBelow = !!task.climbed && !task.climbed.isFable && EFFORTS.indexOf(task.climbed.effort) <= EFFORTS.indexOf(effort)
   return {
     ...task,
     effort,
+    ...(isBelow ? { climbed: null } : {}),
     skill: stage,
     ...(model ? { model, isOnFable: task.isOnFable || isFable(model) } : {}),
   }
@@ -162,7 +166,8 @@ export function usedStageSkill(task: Task, stage: Stage, own: Effort | null, mod
  * effort to stand on.
  */
 export function rungOf(task: Task, own: Effort | null, model: string | null): Rung | null {
-  if (task.climbed) return task.climbed
+  // A climb made on another model (the person switched /model since) goes out as this one takes it.
+  if (task.climbed) return task.climbed.isFable ? task.climbed : { ...task.climbed, effort: fitEffort(task.climbed.effort, model) }
   const effort = task.effort ?? own
   if (!effort) return null
   const onFable = task.isOnFable || isFable(model)
@@ -198,7 +203,7 @@ export function afterCheck(
   model: string | null,
 ): { task: Task; hasClimbed: boolean; hasReachedLadderEnd: boolean } {
   const unmoved = { hasClimbed: false, hasReachedLadderEnd: false }
-  if (passed) return { task: task.climbed ? { ...task, climbed: null, fails: 0, isAtLadderEnd: false } : { ...task, fails: 0 }, ...unmoved }
+  if (passed) return { task: { ...task, climbed: null, fails: 0, isAtLadderEnd: false }, ...unmoved }
   const fails = task.fails + 1
   if (fails < FAILS_TO_STALL) return { task: { ...task, fails }, ...unmoved }
   const here = rungOf(task, own ?? 'medium', model) ?? { effort: 'medium', isFable: false }
@@ -291,9 +296,12 @@ export function ticketLinesOf(text: string): Partial<TicketSetting> {
   return { ...(tier ? { tier } : {}), ...(effort ? { effort } : {}) }
 }
 
-/** The main session takes up a ticket in the implement stage: its effort, a fresh count of checks; its model stays. */
+/**
+ * The main session takes up a ticket in the implement stage: its effort, a fresh count of checks; the task's model
+ * stays, and Fable 5.1 a climb on the last ticket reached is left behind.
+ */
 export function enteredTicket(task: Task, ticket: string, effort: Effort): Task {
-  return { ...task, ticket, effort, climbed: null, fails: 0, isAtLadderEnd: false }
+  return { ...task, ticket, effort, climbed: null, fails: 0, isAtLadderEnd: false, isOnFable: isFable(task.model) }
 }
 
 /**

@@ -340,3 +340,43 @@ test('a session the person runs at max climbs to Fable 5.1 at max, never down to
     ['claude-fable-5-1', 'max'],
   ])
 })
+
+test('a climb made before the person switched to a model without xhigh goes out as that model takes it', async ($, on) => {
+  const { sent, bash } = engine(on, { haiku: 'clarity=goal hard=no risky=no size=small sure=90' })
+  await start($)
+  await type($, 'add a coupon field')
+  await request($, 'high', 0)
+  await fail($, bash)
+  await fail($, bash)
+  await request($, 'high', 1, 'claude-opus-4-6')
+
+  expect(sent.at(-1)).toMatchObject({ model: 'claude-opus-4-6', effort: 'high' })
+})
+
+test('the ladder’s end stops and asks again after a pass, and the band no longer says stopped', async ($, on) => {
+  const { bash } = engine(on, { haiku: 'timeout', model: 'claude-fable-5-1' })
+  const session = mock.session(on)
+  await start($)
+  await type($, 'fix the race in the cart lock')
+  await request($, 'max', 0, 'claude-fable-5-1')
+  await fail($, bash)
+  expect(await bandText($)).toContain('Claude will ask you')
+  await run($, bash, 'npm test', true)
+  expect(await bandText($)).not.toContain('Claude will ask you')
+  await fail($, bash)
+
+  const notes = session.appended().map(row => JSON.stringify(row.message)).filter(text => text.includes('Stop retrying'))
+  expect(notes.length).toBe(2)
+})
+
+test('a test written just before a failing run is the red step, not a stall', async ($, on) => {
+  const { sent, bash } = engine(on, { haiku: 'clarity=clear hard=no risky=no size=small sure=90' })
+  await start($)
+  await type($, 'add a coupon field')
+  await request($, 'high', 0)
+  await $.tool.call({ tool: 'Edit', file_path: 'src/coupon.test.ts', old_string: 'a', new_string: 'b' } as never)
+  await fail($, bash)
+  await request($, 'high', 1)
+
+  expect(sent.map(e => e.effort)).toEqual(['low', 'low'])
+})

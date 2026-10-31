@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, PromptOrigin, Register, RenderChildren } from 'claude-code'
 
 import type { Declined, Effort, HistoryEntry, Language, LanguageChoice, ModelTier, Project, Stage, SubAgent, Switches, Task, TicketSetting, TurnLog } from '../types'
-import { checkRun } from './checks'
+import { checkRun, isTestFile } from './checks'
 import { THEMES, THEME_IDS, agentsSvg, bandKeys, historySvg, isThemeId, stageSvg, stepsSvg, useTheme } from './diagrams'
 import type { Loop, Step, ThemeId } from './diagrams'
 import { EMPTY_TURN, appended, entryOf, historyFrom, historyKey, projectKey, projectOf } from './history'
@@ -58,6 +58,11 @@ const declined = atom({ plugin: 'open-effort', key: 'declined' } as const, { flo
 const isTurnRunning = atom({ plugin: 'open-effort', key: 'isTurnRunning' } as const, false)
 // How many messages the conversation held when the mod offered a model: the question must come after.
 const offerAt = atom({ plugin: 'open-effort', key: 'offerAt' } as const, 0)
+// Whether the main session wrote a test since its last check: the next failing check is the red step, not a stall.
+const isRed = atom({ plugin: 'open-effort', key: 'isRed' } as const, false)
+// Haiku's readings of tickets without Model and Effort lines, by path, with the text read: read again only once the
+// ticket changes.
+const ticketReads = atom({ plugin: 'open-effort', key: 'ticketReads' } as const, {} as Record<string, { text: string; setting: TicketSetting }>)
 // Whether the surface can put an agent's transcript in view; false once it said it draws no main view. The desktop
 // app never can: its band never offers it.
 const canView = atom({ plugin: 'open-effort', key: 'canView' } as const, true)
@@ -65,8 +70,9 @@ const canView = atom({ plugin: 'open-effort', key: 'canView' } as const, true)
 /** Sub-agents kept: the latest ones, enough for any session's running agents. */
 const AGENTS_KEPT = 50
 
-function keptAgents(all: Record<string, SubAgent>): Record<string, SubAgent> {
-  return Object.fromEntries(Object.entries(all).slice(-AGENTS_KEPT))
+/** The sub-agents with one set to `agent`, moved to the newest place: the ones least lately used leave first. */
+function withAgent(all: Record<string, SubAgent>, id: string, agent: SubAgent): Record<string, SubAgent> {
+  return Object.fromEntries([...Object.entries(all).filter(([known]) => known !== id), [id, agent] as const].slice(-AGENTS_KEPT))
 }
 
 /**
@@ -78,6 +84,17 @@ async function subAgent($: EngineInterface, id: string): Promise<SubAgent> {
   if (known) return known
   const listed = (await $.agent.list()).find(a => a.id === id)
   return { effort: null, climbed: null, fails: 0, isClimbable: isBuiltInAgent(listed?.type) }
+}
+
+/** A test file was written, by the main session or a sub-agent: the next failing check is its red step, no stall. */
+async function testWritten($: EngineInterface, agentId: string | undefined, path: unknown): Promise<void> {
+  if (typeof path !== 'string' || !isTestFile(path) || !(await read($, isOn))) return
+  if (agentId === undefined) {
+    await update($, isRed, () => true)
+    return
+  }
+  const agent = await subAgent($, agentId)
+  await update($, agents, all => withAgent(all, agentId, { ...agent, isRed: true }))
 }
 
 /** Drops a hand-off once its agent started, or the call started none. */
@@ -215,10 +232,14 @@ async function ticketSetting($: EngineInterface, path: string): Promise<TicketSe
   }
   const named = ticketLinesOf(text)
   if (named.effort) return { ...(named.tier ? { tier: named.tier } : {}), effort: named.effort }
+  const known = (await read($, ticketReads))[path]
+  if (known && known.text === text) return known.setting
   const { score } = await scoreRequest($, text)
   if (!score) return null
   const tier = named.tier ?? (!isUnsure(score) ? score.model : undefined)
-  return { ...(tier ? { tier } : {}), effort: startingEffort(score) }
+  const setting: TicketSetting = { ...(tier ? { tier } : {}), effort: startingEffort(score) }
+  await update($, ticketReads, all => Object.fromEntries([...Object.entries(all).filter(([p]) => p !== path), [path, { text, setting }] as const].slice(-AGENTS_KEPT)))
+  return setting
 }
 
 /**
@@ -396,6 +417,7 @@ export const register: Register = on => {
     await update($, scoring, n => n + 1)
     await update($, declined, (): Declined => ({ flow: null, model: null }))
     await update($, turnLog, () => EMPTY_TURN)
+    await update($, isRed, () => false)
     try {
       await loadProject($)
       // The session's own effort is known from its first request, not from an earlier session's.
@@ -586,7 +608,7 @@ export const register: Register = on => {
       try {
         // The session's own effort: none on a model that takes none.
         const carried = isEffort(e.effort) ? e.effort : null
-        if (carried && (await read($, sessionEffort)) !== carried) await update($, sessionEffort, () => carried)
+        if ((await read($, sessionEffort)) !== carried && (carried || supportedEfforts(e.model).length === 0)) await update($, sessionEffort, () => carried)
         if ((await read($, sessionModel)) !== e.model) await update($, sessionModel, () => e.model)
         if (await read($, isOn)) {
           // While a new prompt's score is on its way, the task under way is not yet known to go on: the request keeps
@@ -617,7 +639,7 @@ export const register: Register = on => {
           const model = agent.tier && tierOf(e.model) !== agent.tier ? TIER_MODEL[agent.tier] : e.model
           if (agent.climbed) sent = { ...e, model, effort: fitEffort(agent.climbed, model) }
           // What its requests carry, and on which model, so its climbs step through the efforts that model takes.
-          if (!agent.climbed || agent.model !== model) await update($, agents, all => keptAgents({ ...all, [id]: { ...agent, model, ...(agent.climbed ? {} : { effort: carried }) } }))
+          if (!agent.climbed || agent.model !== model) await update($, agents, all => withAgent(all, id, { ...agent, model, ...(agent.climbed ? {} : { effort: carried }) }))
         }
       } catch {
         sent = e
@@ -636,12 +658,17 @@ export const register: Register = on => {
   // A sub-agent of a built-in type starts at its rule's model and effort, unless the call names its own.
   on('tool.call', { tool: 'Agent' }, async ($, e, next) => {
     if (e.model !== undefined || e.effort !== undefined || !(await read($, isOn))) return next(e)
-    const t = await read($, task)
+    // A sub-agent starts from the task's starting point: its own effort (or the session's) on its model. The main
+    // session's climbs and the Fable 5.1 they reached are for its own stalls, not a new agent's search or plan. While
+    // a new prompt's score is on its way, the task under way is not yet known to go on: only its model holds.
+    const under = await read($, task)
+    const t = (await read($, isScoring)) ? { ...FRESH_TASK, model: under.model } : under
     const own = await read($, sessionModel)
     const runsOn = taskModel(t, own)
-    const main = rungOf(t, await read($, sessionEffort), runsOn)
-    // The task's model, Fable 5.1 once it climbed there; named only when it is not the session's.
-    const tier = tierOf(main?.isFable ? FABLE_MODEL : runsOn)
+    const startEffort = t.effort ?? (await read($, sessionEffort))
+    const main = startEffort ? { effort: fitEffort(startEffort, runsOn) } : null
+    // The task's model, named only when it is not the session's.
+    const tier = tierOf(runsOn)
     const taskTier = tier !== tierOf(own) ? tier : null
     // A ticket handed to a sub-agent in the implement stage: it runs on the ticket's model and effort, on the task's
     // model when the ticket names none.
@@ -664,6 +691,18 @@ export const register: Register = on => {
     return next(start ? { ...e, ...start } : e)
   }).catch(($, e, next) => next(e))
 
+  // Writing a test (Edit, Write) marks the red step: the next check is expected to fail once.
+  on('tool.call', { tool: 'Edit' }, async ($, e, next) => {
+    const ran = await next(e)
+    if (ran.deny === undefined && ran.isError !== true) await testWritten($, e.agentId, e.file_path)
+    return ran
+  }).catch(($, e, next) => next(e))
+  on('tool.call', { tool: 'Write' }, async ($, e, next) => {
+    const ran = await next(e)
+    if (ran.deny === undefined && ran.isError !== true) await testWritten($, e.agentId, e.file_path)
+    return ran
+  }).catch(($, e, next) => next(e))
+
   // A sub-agent started for a ticket handed to it: from its first request it runs on the ticket's setting and climbs
   // from it, whatever its type. The spawn carries the Agent call's tool_use_id and answers the agent's own id.
   on('agent.spawn', async ($, e, next) => {
@@ -674,7 +713,7 @@ export const register: Register = on => {
     const id = res.agentId
     if (id) {
       const agent: SubAgent = { effort: ticket.effort, climbed: null, fails: 0, isClimbable: true, ticket: ticket.ticket, ...(ticket.tier ? { tier: ticket.tier } : {}) }
-      await update($, agents, all => keptAgents({ ...all, [id]: agent }))
+      await update($, agents, all => withAgent(all, id, agent))
     }
     return res
   }).catch(($, e, next) => next(e))
@@ -688,13 +727,25 @@ export const register: Register = on => {
     // Only a check whose exit is its own counts: a piped, hidden or backgrounded one says nothing either way.
     if (ran.deny !== undefined || checkRun(e.command, e.run_in_background === true) !== 'counted' || !(await read($, isOn))) return ran
     const id = e.agentId
+    const passed = ran.isError !== true
     if (id !== undefined) {
       const agent = await subAgent($, id)
       if (!agent.isClimbable) return ran
-      const startTier: ModelTier = agent.tier ?? tierOf(taskModel(await read($, task), await read($, sessionModel))) ?? 'opus'
-      const after = agent.ticket ? afterTicketAgentCheck(agent, ran.isError !== true, startTier) : afterAgentCheck(agent, ran.isError !== true, agent.model ?? null)
-      await update($, agents, all => keptAgents({ ...all, [id]: after }))
+      // The first failure after it wrote a test is the red step of test-first work: no stall.
+      if (agent.isRed) {
+        await update($, agents, all => withAgent(all, id, { ...agent, isRed: false }))
+        if (!passed) return ran
+      }
+      // The family it climbs from: its ticket's, else the model its requests go out on, else the task's.
+      const startTier: ModelTier = agent.tier ?? tierOf(agent.model ?? null) ?? tierOf(taskModel(await read($, task), await read($, sessionModel))) ?? 'opus'
+      const after = agent.ticket ? afterTicketAgentCheck({ ...agent, isRed: false }, passed, startTier) : afterAgentCheck({ ...agent, isRed: false }, passed, agent.model ?? null)
+      await update($, agents, all => withAgent(all, id, after))
       return ran
+    }
+    // The first failure after a test was written is the red step of test-first work: no stall.
+    if (await read($, isRed)) {
+      await update($, isRed, () => false)
+      if (!passed) return ran
     }
     const own = await read($, sessionEffort)
     const model = taskModel(await read($, task), await read($, sessionModel))

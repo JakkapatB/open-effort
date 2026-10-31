@@ -463,3 +463,30 @@ test('a flow the person starts while a score is on its way stays when the score 
   expect(await effortNow($, sent)).toBe('high')
   expect(await bandText($)).toContain('Main Flow: spec')
 })
+
+test('Fable 5.1 a climb reached in one stage is left behind as the next stage starts', async ($, on) => {
+  const { sent, bash } = await flow(on)
+  await start($)
+  await type($, 'add coupons to checkout')
+  await stage($, 'review')
+  await fail($, bash)
+  expect((await effortNow($, sent))).toBe('high')
+  expect(sent.at(-1)?.model).toBe('claude-fable-5-1')
+  await stage($, 'retro')
+
+  expect(await effortNow($, sent, 1)).toBe('medium')
+  expect(sent.at(-1)?.model).toBe('claude-opus-5-5')
+})
+
+test('a stage’s skill on a task climbed below that stage’s effort lifts it at once', async ($, on) => {
+  const { sent, bash } = await flow(on, { haiku: 'clarity=clear hard=no risky=no size=small' })
+  await start($)
+  await type($, 'fix the coupon rounding')
+  await fail($, bash)
+  expect(await effortNow($, sent)).toBe('medium')
+  // The test engine's tools fail while its checks do: the skill call must succeed.
+  bash.passes = true
+  await $.tool.call({ tool: 'Skill', skill: 'mattpocock-skills:tdd' })
+
+  expect(await effortNow($, sent, 1)).toBe('high')
+})
