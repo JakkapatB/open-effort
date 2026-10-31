@@ -141,15 +141,22 @@ async function setLanguage($: EngineInterface, choice: LanguageChoice): Promise<
 }
 
 /**
- * A Main Flow stage was started: the task takes the stage's effort. Claude moves a task only once it is in the flow,
- * or after the mod asked the person about it; the person's own stage command (`isFlowStart`) may start the flow.
- * Nothing moves while the mod or the Main Flow is off.
+ * Who moved the task to a stage: the person's own stage command, Claude's stage tool, or a sign that Claude started
+ * one (a stage skill it called or read).
  */
-async function moveToStage($: EngineInterface, stage: Stage, isFlowStart = false): Promise<true | 'off' | 'not-invited'> {
+type StageMover = 'person' | 'tool' | 'sign'
+
+/**
+ * A Main Flow stage was started: the task takes the stage's effort. The person's own stage command may start the
+ * flow; Claude's stage tool may start it only after the mod asked the person about it; a sign only moves a task
+ * already in the flow, since Claude may call a stage skill (tdd, code-review) on work the person chose to do
+ * directly. Nothing moves while the mod or the Main Flow is off.
+ */
+async function moveToStage($: EngineInterface, stage: Stage, by: StageMover): Promise<true | 'off' | 'not-invited'> {
   if (!(await read($, isOn)) || !(await isFlowAvailable($))) return 'off'
   const t = await read($, task)
   if (t.stage === stage) return true
-  if (t.stage === null && !t.isFlowInvited && !isFlowStart) return 'not-invited'
+  if (t.stage === null && by !== 'person' && !(by === 'tool' && t.isFlowInvited)) return 'not-invited'
   // Entering the flow moves the task to the model picked for it (the frontier model by default), never down.
   const moveTo = t.stage === null ? flowModelFor(await read($, flowModel), taskModel(t, await read($, sessionModel))) : null
   await setTask($, (current): Task => ({
@@ -183,7 +190,7 @@ async function ticketSetting($: EngineInterface, path: string): Promise<TicketSe
 
 /** Claude showed it is starting a stage (calling its skill, reading its SKILL.md): the main session's only. */
 async function stageSign($: EngineInterface, agentId: string | undefined, stage: Stage | null): Promise<void> {
-  if (agentId === undefined && stage) await moveToStage($, stage)
+  if (agentId === undefined && stage) await moveToStage($, stage, 'sign')
 }
 
 /** The Main Flow ended: the next request starts a new task. */
@@ -377,7 +384,7 @@ export const register: Register = on => {
     }
     const stage = STAGES.find(s => s === named)
     if (!stage) return { result: `open-effort: the stage must be one of ${STAGES.join(', ')}, or done.` }
-    const moved = await moveToStage($, stage)
+    const moved = await moveToStage($, stage, 'tool')
     return {
       result:
         moved === true ? `open-effort: stage ${stage}; requests go out at its effort.`
@@ -386,7 +393,7 @@ export const register: Register = on => {
     }
   }).catch(() => ({ result: 'open-effort: the stage was not set.' }))
 
-  // A stage skill Claude calls through the Skill tool (to-tickets, code-review, tdd) starts its stage.
+  // A stage skill Claude calls through the Skill tool (to-tickets, code-review, tdd) moves a task in the flow to its stage.
   on('tool.call', { tool: 'Skill' }, async ($, e, next) => {
     const ran = await next(e)
     // Only a skill that ran: one the engine refused (a user-invoked skill) starts no stage.
@@ -394,7 +401,7 @@ export const register: Register = on => {
     return ran
   }).catch(($, e, next) => next(e))
 
-  // Reading a stage skill's SKILL.md, as the Main Flow note asks, starts its stage.
+  // Reading a stage skill's SKILL.md, as the Main Flow note asks, moves a task in the flow to its stage.
   on('tool.call', { tool: 'Read' }, async ($, e, next) => {
     await stageSign($, e.agentId, stageOfPath(e.file_path))
     // Claude reading a ticket in the implement stage takes it up: the ticket's effort, on the task's model.
@@ -416,7 +423,7 @@ export const register: Register = on => {
     if ((await read($, project))?.root !== (await $.session.root())) await loadProject($)
     // A stage command the person types starts its stage, and the flow with it (tdd only inside the flow).
     const typed = e.command && isPerson(e.origin) ? stageOfSkill(e.command.name) : null
-    if (typed && e.command) await moveToStage($, typed, startsFlow(e.command.name))
+    if (typed && e.command && (startsFlow(e.command.name) || (await read($, task)).stage !== null)) await moveToStage($, typed, 'person')
     if (e.isMeta || e.command || !isPerson(e.origin) || !e.text.trim() || isGoOn(e.text) || !(await read($, isOn))) return next(e)
     // Inside the Main Flow, what the person types is part of it: no new task, no score.
     if ((await read($, task)).stage !== null) return next(e)

@@ -42,28 +42,31 @@ test('each stage the stage tool announces sets its own effort', async ($, on) =>
   expect(efforts).toEqual(STAGE_EFFORTS.map(([, effort]) => effort))
 })
 
-test('reading a stage skill’s SKILL.md sets the stage', async ($, on) => {
+test('reading a stage skill’s SKILL.md moves a task in the flow to that stage', async ($, on) => {
   const { sent } = await flow(on)
   await start($)
   await type($, 'add coupons to checkout')
+  await stage($, 'grill')
   await $.tool.call({ tool: 'Read', file_path: `${SKILLS}/engineering/to-tickets/SKILL.md` })
 
   expect(await effortNow($, sent)).toBe('medium')
 })
 
-test('printing a stage skill’s SKILL.md in Bash sets the stage', async ($, on) => {
+test('printing a stage skill’s SKILL.md in Bash moves a task in the flow to that stage', async ($, on) => {
   const { sent } = await flow(on)
   await start($)
   await type($, 'add coupons to checkout')
+  await stage($, 'grill')
   await $.tool.call({ tool: 'Bash', command: `cat ${SKILLS}/engineering/code-review/SKILL.md` })
 
   expect(await effortNow($, sent)).toBe('xhigh')
 })
 
-test('a stage skill Claude calls sets the stage', async ($, on) => {
+test('a stage skill Claude calls moves a task in the flow to that stage', async ($, on) => {
   const { sent } = await flow(on)
   await start($)
   await type($, 'add coupons to checkout')
+  await stage($, 'grill')
   await $.tool.call({ tool: 'Skill', skill: 'mattpocock-skills:to-tickets' })
 
   expect(await effortNow($, sent)).toBe('medium')
@@ -88,6 +91,19 @@ test('a stage skill Claude reads or calls outside an invited flow changes nothin
   expect(await effortNow($, sent)).toBe('low')
 })
 
+test('when the person chose to work directly, a stage skill Claude calls or reads keeps the task out of the flow', async ($, on) => {
+  const { asked } = await flow(on)
+  await start($)
+  await type($, 'add coupons to checkout')
+  await $.tool.call({ tool: 'Skill', skill: 'mattpocock-skills:tdd' })
+  await $.tool.call({ tool: 'Read', file_path: `${SKILLS}/engineering/code-review/SKILL.md` })
+  expect(await bandText($)).not.toContain('Main Flow')
+
+  // The next request is a task of its own, scored as any other.
+  await type($, 'now rename the coupon field')
+  expect(asked.length).toBe(2)
+})
+
 test('the person typing /tdd outside the flow stays in normal mode', async ($, on) => {
   const { sent, asked } = await flow(on, { haiku: 'clarity=clear hard=no risky=no size=small' })
   await start($)
@@ -102,7 +118,7 @@ test('borderline work invites the flow too, for when the person chooses it', asy
   const { sent } = await flow(on, { haiku: 'clarity=goal hard=no risky=no size=borderline' })
   await start($)
   await type($, 'add a coupon field and validate it on the server')
-  await $.tool.call({ tool: 'Read', file_path: `${SKILLS}/engineering/grill-with-docs/SKILL.md` })
+  await stage($, 'grill')
   await stage($, 'tickets')
 
   expect(await effortNow($, sent)).toBe('medium')

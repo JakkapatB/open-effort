@@ -46,7 +46,7 @@ export type Task = {
   isAtLadderEnd: boolean
   /** The Main Flow stage it is in; null in normal mode. */
   stage: Stage | null
-  /** Whether the mod sent it into the Main Flow, or asked the person whether to go: only then may Claude start a stage. */
+  /** Whether the mod asked the person whether to take the Main Flow: only then may Claude's stage tool start it. */
   isFlowInvited: boolean
   /** The model the person chose for this task when the mod offered a more capable one; null for the session's. */
   model: string | null
