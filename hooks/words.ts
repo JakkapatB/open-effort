@@ -82,6 +82,10 @@ export type PaneWords = {
   language: string
   auto: string
   theme: string
+  flowModel: string
+  flowModels: Readonly<Record<'frontier' | 'fable' | 'session', string>>
+  /** What each Main Flow model costs: its limits, said where it is picked. */
+  flowModelLimits: Readonly<Record<'frontier' | 'fable' | 'session', string>>
   themes: Readonly<Record<'claude' | 'lime' | 'ocean' | 'rose', string>>
   history: (turns: number) => string
   noHistory: string
@@ -222,6 +226,13 @@ const EN: Words = {
     install: 'Install them from a terminal, then reload plugins:',
     language: 'Language',
     theme: 'Theme',
+    flowModel: 'Model for the Main Flow',
+    flowModels: { frontier: 'Frontier · Opus 5.5', fable: 'Fable 5.1', session: "Session's model" },
+    flowModelLimits: {
+      frontier: 'Every stage runs on Opus 5.5. A session on a smaller model switches once as the flow starts: the prompt cache starts afresh, and it costs more than Sonnet. A session on Fable 5.1 stays on it.',
+      fable: 'Every stage runs on Fable 5.1, the most capable model: the most expensive per token, and its turns run longer. The prompt cache starts afresh as the flow starts.',
+      session: "The flow stays on the session's model: no switch, the cache holds. On a smaller model, grill, spec and review may come out weaker.",
+    },
     themes: { claude: 'Claude', lime: 'Lime', ocean: 'Ocean', rose: 'Rose' },
     auto: 'Auto',
     history: turns => `History · ${turns} turns`,
@@ -282,6 +293,13 @@ const TH: Words = {
     install: 'ติดตั้งจาก terminal แล้ว reload plugins:',
     language: 'ภาษา',
     theme: 'ธีมสี',
+    flowModel: 'โมเดลของ Main Flow',
+    flowModels: { frontier: 'Frontier · Opus 5.5', fable: 'Fable 5.1', session: 'ตามโมเดลของ session' },
+    flowModelLimits: {
+      frontier: 'ทุก stage ใช้ Opus 5.5 ถ้า session ใช้โมเดลที่เล็กกว่า จะเปลี่ยนครั้งเดียวตอนเข้า flow: prompt cache เริ่มใหม่ และแพงกว่า Sonnet ถ้า session ใช้ Fable 5.1 อยู่แล้วจะใช้ต่อ',
+      fable: 'ทุก stage ใช้ Fable 5.1 โมเดลที่เก่งที่สุด: แพงที่สุดต่อ token และแต่ละ turn ใช้เวลานานกว่า prompt cache เริ่มใหม่ตอนเข้า flow',
+      session: 'ใช้โมเดลของ session ตลอด flow: ไม่เปลี่ยนโมเดล cache ไม่เสีย แต่ถ้าเป็นโมเดลที่เล็กกว่า grill, spec และ review อาจออกมาด้อยกว่า',
+    },
     themes: { claude: 'Claude', lime: 'มะนาว', ocean: 'ฟ้า', rose: 'ชมพู' },
     auto: 'อัตโนมัติ',
     history: turns => `ประวัติ · ${turns} turn`,

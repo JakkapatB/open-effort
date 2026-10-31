@@ -84,6 +84,16 @@ With the Main Flow on (the default) and Matt Pocock's skills installed, large or
 | review | code-review | `xhigh` |
 | retro | retro | `medium` |
 
+The flow runs on the model picked for it in the pane:
+
+| Model for the Main Flow | Limits |
+|---|---|
+| **Frontier · Opus 5.5** (default) | A session on a smaller model switches once as the flow starts: the prompt cache starts afresh, and it costs more than Sonnet. A session on Fable 5.1 stays on it. |
+| **Fable 5.1** | The most capable model: the most expensive per token, and its turns run longer. The cache starts afresh as the flow starts. |
+| **Session's model** | No switch, the cache holds. On a smaller model, grill, spec and review may come out weaker. |
+
+The model never steps down, and a ticket's sub-agent still runs on the ticket's model.
+
 The mod knows the stage from its `stage` tool, from Claude reading a stage skill's `SKILL.md`, from a stage skill Claude runs, and from a stage command you type. The flow ends when the retro turn ends or Claude says it is done.
 
 **Tickets.** In the tickets stage, Claude puts a `Model:` and an `Effort:` line near the top of every ticket (`<feature>/issues/NN-*.md`), and you review them with the tickets. In the implement stage:
@@ -110,7 +120,7 @@ The band above the prompt draws the task as a small flow: what Haiku read (or th
 `/open-effort` or the band's ≡ opens the pane:
 
 - **Switch:** the mod on or off for this project. Under **Advanced**, the default for the projects you have not switched.
-- **Main Flow:** on or off for this project, and the skills that are missing with the commands to install them.
+- **Main Flow:** on or off for this project, the model it runs on (with each choice's limits), and the skills that are missing with the commands to install them.
 - **Language:** auto (follows Claude Code's `language` setting), ไทย or English.
 - **Theme:** Claude (orange), Lime, Ocean or Rose.
 - **History:** the project's last 500 turns as a chart: the effort each turn started at and climbed to, and the turns by model and effort.

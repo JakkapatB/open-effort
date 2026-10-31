@@ -1,6 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, PromptOrigin, Register } from 'claude-code'
 
+import type { FlowModel } from './policy'
 import type { Effort, HistoryEntry, Language, LanguageChoice, ModelTier, Project, Stage, SubAgent, Switches, Task, TicketSetting, TurnLog } from '../types'
 import { checkRun } from './checks'
 import { EMPTY_TURN, appended, entryOf, historyFrom, historyKey, projectKey, projectOf } from './history'
@@ -8,7 +9,7 @@ import {
   ASK_NOTE, IMPLEMENT_NOTE, INSTALL_COMMANDS, MODEL_TOOL_SPEC, TICKET_NOTE, STAGES, STAGE_TOOL_SPEC, modelNote, missingSkills, routeOf, stageOfPath, stageOfSkill, startsFlow,
 } from './main-flow'
 import {
-  EFFORTS, FABLE_MODEL, FAILS_TO_STALL, FRESH_TASK, TIER_MODEL, afterTicketAgentCheck, enteredTicket, fitEffort, modelUp, taskModel, ticketIn, ticketOf, ticketSettingOf, tierOf, afterAgentCheck, afterCheck, enteredStage, isBuiltInAgent, isEffort, isFable, rungOf, startingEffort,
+  EFFORTS, FABLE_MODEL, FAILS_TO_STALL, FLOW_MODELS, FRESH_TASK, TIER_MODEL, flowModelFor, isFlowModel, afterTicketAgentCheck, enteredTicket, fitEffort, modelUp, taskModel, ticketIn, ticketOf, ticketSettingOf, tierOf, afterAgentCheck, afterCheck, enteredStage, isBuiltInAgent, isEffort, isFable, rungOf, startingEffort,
   subAgentStart,
 } from './policy'
 import { SCORE_GRACE_MS, isGoOn, isUnsure, scoreRequest } from './score'
@@ -29,6 +30,8 @@ const project = atom({ plugin: 'open-effort', key: 'project' } as const, null as
 const sessionEffort = atom({ plugin: 'open-effort', key: 'sessionEffort' } as const, null as Effort | null)
 const sessionModel = atom({ plugin: 'open-effort', key: 'sessionModel' } as const, null as string | null)
 const languageChoice = atom({ plugin: 'open-effort', key: 'languageChoice' } as const, 'auto' as LanguageChoice)
+// The model the Main Flow runs on, picked in the pane and kept in the store.
+const flowModel = atom({ plugin: 'open-effort', key: 'flowModel' } as const, 'frontier' as FlowModel)
 // The colour theme picked in the pane, kept in the store for every session.
 const themeChoice = atom({ plugin: 'open-effort', key: 'themeChoice' } as const, 'claude' as ThemeId)
 const language = atom({ plugin: 'open-effort', key: 'language' } as const, 'en' as Language)
@@ -69,6 +72,7 @@ async function subAgent($: EngineInterface, id: string): Promise<SubAgent> {
 // project (projectKey, historyKey) its switches and its history.
 const STORE_IS_ON = 'isOn'
 const STORE_MAIN_FLOW = 'mainFlow'
+const STORE_FLOW_MODEL = 'flowModel'
 const STORE_LANGUAGE = 'language'
 const STORE_THEME = 'theme'
 
@@ -110,6 +114,12 @@ async function checkSkills($: EngineInterface): Promise<void> {
   await update($, missing, () => lacking)
 }
 
+/** The Main Flow's model, picked in the pane and kept in the store. */
+async function setFlowModel($: EngineInterface, pick: FlowModel): Promise<void> {
+  await update($, flowModel, () => pick)
+  await $.store.set(STORE_FLOW_MODEL, pick)
+}
+
 /** The colour theme picked, kept in the store. */
 async function setTheme($: EngineInterface, id: ThemeId): Promise<void> {
   await update($, themeChoice, () => id)
@@ -137,7 +147,12 @@ async function moveToStage($: EngineInterface, stage: Stage, isFlowStart = false
   const t = await read($, task)
   if (t.stage === stage) return true
   if (t.stage === null && !t.isFlowInvited && !isFlowStart) return 'not-invited'
-  await setTask($, (current): Task => enteredStage(current, stage))
+  // Entering the flow moves the task to the model picked for it (the frontier model by default), never down.
+  const moveTo = t.stage === null ? flowModelFor(await read($, flowModel), taskModel(t, await read($, sessionModel))) : null
+  await setTask($, (current): Task => ({
+    ...enteredStage(current, stage),
+    ...(moveTo ? { model: moveTo, isOnFable: current.isOnFable || isFable(moveTo) } : {}),
+  }))
   // The stages where tickets are written and worked tell Claude how a ticket's model and effort are named and used.
   const note = stage === 'tickets' ? TICKET_NOTE : stage === 'implement' ? IMPLEMENT_NOTE : null
   if (note) await $.session.append({ message: { type: 'user', content: [{ type: 'text', text: note }] } })
@@ -286,6 +301,8 @@ export const register: Register = on => {
       await update($, sessionEffort, () => null)
       const choice = await $.store.get(STORE_LANGUAGE)
       await setLanguage($, isLanguageChoice(choice) ? choice : 'auto')
+      const pickedFlowModel = await $.store.get(STORE_FLOW_MODEL)
+      await update($, flowModel, () => (isFlowModel(pickedFlowModel) ? pickedFlowModel : 'frontier'))
       const pickedTheme = await $.store.get(STORE_THEME)
       await update($, themeChoice, () => (isThemeId(pickedTheme) ? pickedTheme : 'claude'))
       await checkSkills($)
@@ -714,6 +731,7 @@ export const register: Register = on => {
     const list = await read($, history)
     const lacking = await read($, missing)
     const name = p?.name ?? '-'
+    const pickedFlowModel = await read($, flowModel)
     const picked = await read($, themeChoice)
     useTheme(picked)
     const ACCENT = THEMES[picked].accent
@@ -769,6 +787,11 @@ export const register: Register = on => {
         {section(
           words.mainFlow,
           row(words.useHere(name), toggle('flow-project-on', 'flow-project-off', s.flowProject ?? s.flowMachine, value => setSwitches($, x => ({ ...x, flowProject: value })))),
+          <Box flexDirection="column" gap={1}>
+            <Text>{words.flowModel}</Text>
+            {segmented(FLOW_MODELS.map(pick => ({ key: `flow-model-${pick}`, label: words.flowModels[pick], isPicked: pickedFlowModel === pick, onPress: () => setFlowModel($, pick) })))}
+            <Text dimColor>{words.flowModelLimits[pickedFlowModel]}</Text>
+          </Box>,
           ...(lacking.length > 0
             ? [
                 <Box flexDirection="column">

@@ -216,3 +216,51 @@ test('the stage tool says when a task was not sent into the Main Flow', async ($
 
   expect(JSON.stringify(await stage($, 'implement'))).toContain('not sent into the Main Flow')
 })
+
+test('entering the Main Flow moves a Sonnet session’s task to the frontier model', async ($, on) => {
+  const { sent } = await flow(on, { model: 'claude-sonnet-5-5' })
+  await start($)
+  await request($, 'high', 0, 'claude-sonnet-5-5')
+  await type($, 'add coupons to checkout')
+  await stage($, 'grill')
+  await request($, 'high', 1, 'claude-sonnet-5-5')
+  await stage($, 'review')
+  await request($, 'high', 2, 'claude-sonnet-5-5')
+
+  expect(sent.slice(1).map(e => [e.model, e.effort])).toEqual([
+    ['claude-opus-5-5', 'high'],
+    ['claude-opus-5-5', 'xhigh'],
+  ])
+})
+
+test('the pane picks Fable 5.1 or the session’s model for the Main Flow, and says what each costs', async ($, on) => {
+  const { sent } = await flow(on, { model: 'claude-sonnet-5-5' })
+  await start($)
+  await request($, 'high', 0, 'claude-sonnet-5-5')
+  expect(await paneText($)).toContain('the prompt cache starts afresh')
+
+  await pressPane($, 'flow-model-session')
+  expect(await paneText($)).toContain('may come out weaker')
+  await type($, 'add coupons to checkout')
+  await stage($, 'grill')
+  await request($, 'high', 1, 'claude-sonnet-5-5')
+  expect(sent.at(-1)?.model).toBe('claude-sonnet-5-5')
+  await stage($, 'done')
+
+  await pressPane($, 'flow-model-fable')
+  await type($, 'add gift cards to checkout')
+  await stage($, 'grill')
+  await request($, 'high', 2, 'claude-sonnet-5-5')
+  expect(sent.at(-1)?.model).toBe('claude-fable-5-1')
+})
+
+test('a session already on Fable 5.1 keeps it in the Main Flow', async ($, on) => {
+  const { sent } = await flow(on, { model: 'claude-fable-5-1' })
+  await start($)
+  await request($, 'high', 0, 'claude-fable-5-1')
+  await type($, 'add coupons to checkout')
+  await stage($, 'grill')
+  await request($, 'high', 1, 'claude-fable-5-1')
+
+  expect(sent.at(-1)?.model).toBe('claude-fable-5-1')
+})

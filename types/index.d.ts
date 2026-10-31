@@ -120,6 +120,7 @@ declare module 'claude-code' {
       project: Project | null
       languageChoice: LanguageChoice
       themeChoice: 'claude' | 'lime' | 'ocean' | 'rose'
+      flowModel: 'frontier' | 'fable' | 'session'
       /** The project's finished turns, oldest first. */
       history: HistoryEntry[]
       /** When each of the band's steps first showed (bandKeys), so only new ones animate in. */

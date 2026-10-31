@@ -273,3 +273,28 @@ export function afterTicketAgentCheck(agent: SubAgent, passed: boolean, startTie
   const up = TIERS[TIERS.indexOf(tier) + 1]
   return up ? { ...agent, tier: up, climbed: 'high', fails: 0 } : { ...agent, fails: 0 }
 }
+
+/** The model the Main Flow runs on: the frontier model, Fable 5.1, or the session's own. */
+export type FlowModel = 'frontier' | 'fable' | 'session'
+
+export const FLOW_MODELS: readonly FlowModel[] = ['frontier', 'fable', 'session']
+
+/** Today's frontier model, the Main Flow's default: the strongest generally used model below Fable. */
+export const FRONTIER_MODEL = 'claude-opus-5-5'
+
+export function isFlowModel(value: unknown): value is FlowModel {
+  return typeof value === 'string' && (FLOW_MODELS as readonly string[]).includes(value)
+}
+
+/**
+ * The model a task moves to as it enters the Main Flow: the one picked for the flow, when it is above the model the
+ * task runs on; null to keep it (the session's own picked, or the task already on as capable a model).
+ */
+export function flowModelFor(pick: FlowModel, runsOn: string | null): string | null {
+  if (pick === 'session') return null
+  const target = pick === 'fable' ? FABLE_MODEL : FRONTIER_MODEL
+  const own = tierOf(runsOn)
+  const want = tierOf(target)
+  if (own === null || want === null) return target
+  return TIERS.indexOf(want) > TIERS.indexOf(own) ? target : null
+}
