@@ -264,3 +264,31 @@ test('a session already on Fable 5.1 keeps it in the Main Flow', async ($, on) =
 
   expect(sent.at(-1)?.model).toBe('claude-fable-5-1')
 })
+
+test('in the Main Flow on a Sonnet session, Plan and general-purpose sub-agents run on the frontier model', async ($, on) => {
+  const { calls } = await flow(on, { model: 'claude-sonnet-5-5' })
+  await start($)
+  await request($, 'high', 0, 'claude-sonnet-5-5')
+  await type($, 'add coupons to checkout')
+  await stage($, 'review')
+  const spawn = async (input: Record<string, unknown>) => {
+    await $.tool.call({ tool: 'Agent', description: 'review', prompt: 'review the diff against the standards', ...input })
+    const call = calls[calls.length - 1] ?? {}
+    return { model: call.model, effort: call.effort }
+  }
+
+  expect(await spawn({ subagent_type: 'general-purpose' })).toEqual({ model: 'opus', effort: 'xhigh' })
+  expect(await spawn({ subagent_type: 'Plan' })).toEqual({ model: 'opus', effort: 'high' })
+  expect(await spawn({ subagent_type: 'Explore' })).toEqual({ model: 'haiku', effort: 'low' })
+  expect(await spawn({ subagent_type: 'reviewer' })).toEqual({ model: undefined, effort: undefined })
+})
+
+test('calling implement-spec starts the implement stage', async ($, on) => {
+  const { sent } = await flow(on)
+  await start($)
+  await type($, 'add coupons to checkout')
+  await stage($, 'tickets')
+  await $.tool.call({ tool: 'Skill', skill: 'mattpocock-skills:implement-spec' } as never)
+
+  expect(await effortNow($, sent, 1)).toBe('high')
+})

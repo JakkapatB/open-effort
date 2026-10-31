@@ -185,13 +185,15 @@ const SUB_AGENT_TOP: Effort = 'xhigh'
 
 /**
  * What a sub-agent of a built-in type starts with: Explore on Haiku at low, Plan at high and general-purpose (the
- * type when none is named) at the main session's current effort, both on the session's model. Any other type is
- * the person's own and gets null: left as it is.
+ * type when none is named) at the main session's current effort. Plan and general-purpose run on the task's model:
+ * `taskTier` is its family when it is not the session's (the Main Flow's Opus 5.5, an accepted offer, Fable 5.1), else
+ * null and the sub-agent keeps the session's. Any other type is the person's own and gets null: left as it is.
  */
-export function subAgentStart(type: string | undefined, main: Effort | null): { model?: 'haiku'; effort?: Effort } | null {
+export function subAgentStart(type: string | undefined, main: Effort | null, taskTier: ModelTier | null = null): { model?: ModelTier; effort?: Effort } | null {
+  const model = taskTier ? { model: taskTier } : {}
   if (type === 'Explore') return { model: 'haiku', effort: 'low' }
-  if (type === 'Plan') return { effort: 'high' }
-  if (type === undefined || type === 'general-purpose') return main ? { effort: main } : null
+  if (type === 'Plan') return { ...model, effort: 'high' }
+  if (type === undefined || type === 'general-purpose') return main ? { ...model, effort: main } : taskTier ? model : null
   return null
 }
 

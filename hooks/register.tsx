@@ -519,8 +519,13 @@ export const register: Register = on => {
         return next({ ...e, effort: setting.effort, ...(setting.tier ? { model: setting.tier } : {}) })
       }
     }
-    const main = rungOf(await read($, task), await read($, sessionEffort), taskModel(await read($, task), await read($, sessionModel)))
-    const start = subAgentStart(e.subagent_type, main?.effort ?? null)
+    const t = await read($, task)
+    const own = await read($, sessionModel)
+    const runsOn = taskModel(t, own)
+    const main = rungOf(t, await read($, sessionEffort), runsOn)
+    // The task's model, Fable 5.1 once it climbed there; named only when it is not the session's.
+    const tier = tierOf(main?.isFable ? FABLE_MODEL : runsOn)
+    const start = subAgentStart(e.subagent_type, main?.effort ?? null, tier !== tierOf(own) ? tier : null)
     return next(start ? { ...e, ...start } : e)
   }).catch(($, e, next) => next(e))
 

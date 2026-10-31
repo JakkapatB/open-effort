@@ -19,12 +19,13 @@ export function missingSkills(commands: readonly CommandInfo[]): string[] {
 
 export const STAGES: readonly Stage[] = ['grill', 'spec', 'tickets', 'implement', 'review', 'retro']
 
-/** The stage each of Matt Pocock's skills runs; tdd is part of implementing. */
+/** The stage each of Matt Pocock's skills runs; tdd and implement-spec are part of implementing. */
 const SKILL_STAGE: Readonly<Record<string, Stage>> = {
   'grill-with-docs': 'grill',
   'to-spec': 'spec',
   'to-tickets': 'tickets',
   implement: 'implement',
+  'implement-spec': 'implement',
   tdd: 'implement',
   'code-review': 'review',
   retro: 'retro',
