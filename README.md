@@ -40,7 +40,7 @@ Nothing to set up: the band appears as soon as it is installed.
 ## How it works
 
 <p align="center">
-  <img src="docs/images/flow-en.png" width="760" alt="You type a request, Haiku reads it, Claude asks you about big work or a stronger model, Claude works at the starting effort, a passing check returns to the starting effort, and three failing checks in a row raise it one level">
+  <img src="docs/images/flow-en.png" width="900" alt="The whole flow: a request is kept in the task or read by Haiku; a new task gets a starting effort, Claude asks about a stronger model and the Main Flow, Claude works, a passing check returns to the starting effort, three failures raise it one level, past xhigh it switches to Fable 5.1, and still failing at max Claude stops and asks you; the Main Flow, tickets, sub-agents and history are shown beside it">
 </p>
 
 ### The ladder
