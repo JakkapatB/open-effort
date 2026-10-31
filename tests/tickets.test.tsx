@@ -197,9 +197,17 @@ test('a ticket\u2019s sub-agent is known from the Agent call\u2019s answer when 
   // The Agent call answers with the agent's id (t3, by its description in the test engine).
   await $.tool.call({ tool: 'Agent', tool_use_id: 'tu-3', description: 'ticket 03', prompt: `Implement ${T3} with TDD.` } as never)
   await $.turn.start({ text: '', turnId: 't-t3', agentId: 't3' })
-  await agentStep($, 't3', 'claude-sonnet-5-5', 'high', 0)
-  for (let i = 0; i < 3; i++) await run($, bash, 'npm test', false, 't3')
-  await agentStep($, 't3', 'claude-sonnet-5-5', 'high', 1)
+  let index = 0
+  await agentStep($, 't3', 'claude-sonnet-5-5', 'high', index++)
+  for (let round = 0; round < 2; round++) {
+    for (let i = 0; i < 3; i++) await run($, bash, 'npm test', false, 't3')
+    await agentStep($, 't3', 'claude-sonnet-5-5', 'high', index++)
+  }
 
-  expect(sent.filter(e => e.agentId === 't3').map(e => e.effort)).toEqual(['high', 'xhigh'])
+  // Past xhigh a ticket's sub-agent moves a model up; one not known as the ticket's would stay on Sonnet.
+  expect(sent.filter(e => e.agentId === 't3').map(e => [e.model, e.effort])).toEqual([
+    ['claude-sonnet-5-5', 'high'],
+    ['claude-sonnet-5-5', 'xhigh'],
+    ['claude-opus-5-5', 'high'],
+  ])
 })
