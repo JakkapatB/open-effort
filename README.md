@@ -12,19 +12,21 @@ A Claude Code mod that sets how hard Claude thinks so it fits the work in front 
 
 ## Install
 
+In the desktop app: click **+** next to the prompt box, then **Plugins**, **Add marketplace** with `JakkapatB/open-effort`, then **Add plugin**.
+
+At the prompt of a terminal session:
+
+```
+/plugin install open-effort --marketplace JakkapatB/open-effort
+```
+
 From a shell:
 
 ```bash
-claude plugin marketplace add JakkapatB/open-effort
+claude plugin install open-effort --marketplace JakkapatB/open-effort
 ```
 
-```bash
-claude plugin install open-effort@open-effort
-```
-
-In the desktop app: click **+** next to the prompt box, then **Plugins**, **Add marketplace** with `JakkapatB/open-effort`, then add **open-effort**.
-
-Then run `/reload-plugins` or start a new session. The band appears above the prompt; there is nothing to set up.
+Answer `y` to add the marketplace, then pick a scope (the user scope is first). The mod is active at once: the band appears above the prompt, with nothing to set up.
 
 ### Requirements
 
@@ -171,14 +173,12 @@ open-effort เป็น mod ของ Claude Code ที่ปรับ effort 
 - **Main Flow ของ Matt Pocock (เลือกได้):** งาน implement ใหญ่ Claude จะถามก่อนว่าจะทำผ่าน grill, spec, tickets, implement, review, retro ไหม แต่ละขั้นและแต่ละ ticket มี effort ของตัวเอง
 - **เห็นตลอด:** แถบเหนือช่องพิมพ์บอก effort, โมเดล และเหตุผล ส่วน pane ข้างแชทมีสวิตช์, ธีมสี และกราฟประวัติ
 
-ติดตั้ง:
+ติดตั้งในแอป desktop: กด **+** ข้างช่องพิมพ์ → **Plugins** → **Add marketplace** ใส่ `JakkapatB/open-effort` → **Add plugin**
+
+หรือจาก terminal:
 
 ```bash
-claude plugin marketplace add JakkapatB/open-effort
-```
-
-```bash
-claude plugin install open-effort@open-effort
+claude plugin install open-effort --marketplace JakkapatB/open-effort
 ```
 
 ตั้ง `language` ของ Claude Code เป็น Thai หรือเลือก "ไทย" ใน pane แล้วแถบกับ pane จะเป็นภาษาไทย ข้อมูลทั้งหมดเก็บในเครื่องของคุณ และไม่เก็บข้อความที่คุณพิมพ์
