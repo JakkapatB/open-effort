@@ -42,15 +42,21 @@
 
 ## ติดตั้ง
 
-**แอป desktop:** กด **+** ข้างช่องแชท → **Plugins** → **Add marketplace** → ใส่ `JakkapatB/open-effort` → **Add plugin**
+**ใน shell** (คำสั่งเดียว ใช้ได้ทั้ง Claude Code ใน terminal และในแอป desktop):
 
-**terminal:**
+```bash
+claude plugin marketplace add JakkapatB/open-effort && claude plugin install open-effort@open-effort
+```
+
+**หรือพิมพ์ในช่องแชทของ Claude Code ใน terminal:**
 
 ```
 /plugin install open-effort --marketplace JakkapatB/open-effort
 ```
 
-ติดตั้งเสร็จใช้ได้เลย ไม่ต้องตั้งค่าเพิ่ม
+**หรือในแอป desktop:** **Settings** → **Customize** → **Plugins** → **+ Add** → **Add marketplace** → ใส่ `JakkapatB/open-effort` → **Sync** แล้วกดติดตั้ง **open-effort**
+
+ไม่ต้องตั้งค่าเพิ่ม เปิด session ใหม่แล้วแถบจะขึ้นเหนือช่องแชทเอง
 
 ## ลองใช้
 
