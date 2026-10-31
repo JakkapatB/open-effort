@@ -45,7 +45,6 @@ export function bandKeys(task: Task): string[] {
   ]
 }
 
-/** A diagram drawn at a fixed height, as wide as its content; the surface scales nothing. */
 /** A diagram drawn at a fixed height, as wide as its content; `anchor` is where a branch leaves it, when it has one. */
 export type Drawing = { source: string; width: number; height: number; anchor?: number; anchorLeft?: number }
 
@@ -65,8 +64,6 @@ text{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",sans-
 .pulse{transform-box:fill-box;transform-origin:center;animation:pulse 1.2s ease-in-out infinite}@keyframes pulse{50%{opacity:.35;transform:scale(1.35)}}
 @media (prefers-reduced-motion:reduce){.pop,.fade,.glow,.run,.pulse,.leave{animation:none}}.link.on{stroke:#d97757}
 .joint{fill:#1c1c1f;stroke:#4a4a52}.joint.on{stroke:#d97757}
-.tag{fill:#26262b;stroke:#3a3a41}.tag.up{fill:#3a1414;stroke:#7f1d1d}.tagText{fill:#a1a1aa;font-size:8.5px}.tagText.up{fill:#fca5a5}
-.start{fill:#d97757}.startIcon{fill:#ffffff;font-size:9px}
 .card.active{stroke:#d97757}.card.alert{stroke:#eab308}.card.violet{stroke:#8b5cf6}.card.red{stroke:#ef4444}
 .mark{fill:#2a2a30}.mark.done,.mark.active{fill:#d97757}.mark.alert{fill:#eab308}.mark.violet{fill:#8b5cf6}.mark.red{fill:#ef4444}
 .markText{fill:#a1a1aa;font-size:10px;font-weight:700}.markText.done,.markText.active,.markText.alert{fill:#ffffff}.markText.violet,.markText.red{fill:#fff}
@@ -82,8 +79,7 @@ text{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",sans-
 .card{fill:#fff;stroke:#e4e4e7}.card.on{stroke:#c15f3c}.tile{fill:#f4f4f5}.tile.brand{fill:#d97757}
 .icon{fill:#27272a}.label{fill:#71717a}.value{fill:#18181b}
 .link{stroke:#d4d4d8}.link.on{stroke:#c15f3c}.joint{fill:#fff;stroke:#d4d4d8}.joint.on{stroke:#c15f3c}
-.tag{fill:#f4f4f5;stroke:#e4e4e7}.tag.up{fill:#fee2e2;stroke:#fecaca}.tagText{fill:#52525b}.tagText.up{fill:#b91c1c}
-.start{fill:#d97757}.card.active{stroke:#c15f3c}.mark{fill:#f4f4f5}.mark.done,.mark.active{fill:#d97757}.value.dim{fill:#3f3f46}.arrow{stroke:#d4d4d8}.arrow.on{stroke:#c15f3c}.loopTag{fill:#fff}.loopText.brand{fill:#a4472a}.loopText.alert{fill:#a16207}.loop.brand,.loopHead.brand,.loopTag.brand{stroke:#c15f3c}.tick{fill:#e4e4e7}.tick.fill{fill:#f3d3c5}.tick.on{fill:#d97757}.bar{fill:#e4e4e7}.bar.on{fill:#d97757}.axis{stroke:#f4f4f5}}
+.card.active{stroke:#c15f3c}.mark{fill:#f4f4f5}.mark.done,.mark.active{fill:#d97757}.value.dim{fill:#3f3f46}.arrow{stroke:#d4d4d8}.arrow.on{stroke:#c15f3c}.loopTag{fill:#fff}.loopText.brand{fill:#a4472a}.loopText.alert{fill:#a16207}.loop.brand,.loopHead.brand,.loopTag.brand{stroke:#c15f3c}.tick{fill:#e4e4e7}.tick.fill{fill:#f3d3c5}.tick.on{fill:#d97757}.bar{fill:#e4e4e7}.bar.on{fill:#d97757}.axis{stroke:#f4f4f5}}
 </style>`
 
 function escape(text: string): string {
@@ -302,7 +298,7 @@ export function stepsSvg(all: readonly Step[], maxWidth: number, isRunning = fal
 
 /**
  * The sub-agents at work, as one node under the step at work: a running stem down from it (`from`) to a pill naming
- * how many work. Their names follow beneath as buttons of their own, so nothing here has to line up with them.
+ * how many work. Their names follow beneath, drawn apart from this, so nothing here has to line up with them.
  */
 export function agentsSvg(from: number, width: number, said: string, isNew: boolean): Drawing {
   const label = fit(said, 11, width - 40)

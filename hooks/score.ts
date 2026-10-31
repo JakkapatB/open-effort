@@ -8,7 +8,7 @@ export const SCORE_TIMEOUT_MS = 15000
 /** How long a prompt waits for its score, so a quick one still goes with it; a later one follows as a row. */
 export const SCORE_GRACE_MS = 1200
 
-/** Haiku's instructions: one line of four readings, in the words parseScore reads. */
+/** Haiku's instructions: one line of readings, in the words parseScore reads. */
 export const SCORE_SYSTEM = [
   'You score one request a person typed to a coding agent. Reply with exactly one line and nothing else:',
   'clarity=<clear|goal|unclear> hard=<yes|no> risky=<yes|no> size=<none|small|borderline|large> model=<haiku|sonnet|opus|fable> sure=<0-100>',
@@ -25,7 +25,8 @@ export const SCORE_SYSTEM = [
 
 const CLARITIES: readonly Clarity[] = ['clear', 'goal', 'unclear']
 const SIZES: readonly Size[] = ['none', 'small', 'borderline', 'large']
-const TIERS: readonly ModelTier[] = ['haiku', 'sonnet', 'opus', 'fable']
+/** The model families, least capable first. */
+export const MODEL_TIERS: readonly ModelTier[] = ['haiku', 'sonnet', 'opus', 'fable']
 
 function field(reply: string, name: string): string | undefined {
   return new RegExp(`\\b${name}\\s*[=:]\\s*([a-z]+)`, 'i').exec(reply)?.[1]?.toLowerCase()
@@ -47,7 +48,7 @@ export function parseScore(reply: string): Score | null {
     isRisky: field(reply, 'risky') === 'yes',
     size: SIZES.includes(size as Size) ? (size as Size) : 'none',
     ...(sure !== undefined ? { confidence: Math.min(100, Number(sure)) } : {}),
-    ...(TIERS.includes(model as ModelTier) ? { model: model as ModelTier } : {}),
+    ...(MODEL_TIERS.includes(model as ModelTier) ? { model: model as ModelTier } : {}),
     ...(field(reply, 'continue') === 'yes' ? { continues: true } : {}),
   }
 }

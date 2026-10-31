@@ -77,22 +77,23 @@ export const STAGE_TOOL_SPEC = {
 /** Where a new task goes: a question for the person first (the Main Flow or directly), or normal mode. */
 export type Route = 'ask' | 'normal'
 
-/** Large implementation work enters the Main Flow and borderline work asks, when the flow is available; all else is normal. */
+/**
+ * Large or borderline work asks the person once whether to take the Main Flow, when it is available; all else is
+ * normal. Nothing goes in unasked: Haiku's readings waver too much for that.
+ */
 export function routeOf(size: Size, isAvailable: boolean): Route {
-  // Large or borderline work asks the person once: Haiku's confidence wavers too much to send work in unasked.
   return isAvailable && (size === 'large' || size === 'borderline') ? 'ask' : 'normal'
 }
 
 const HOW_TO_RUN = [
-  "Its skills are user-invoked, so do not call them with the Skill tool: for each stage, read that skill's SKILL.md in the installed mattpocock-skills plugin (under ~/.claude/plugins/cache/mattpocock/mattpocock-skills/) and follow it.",
+  "Most of its skills are user-invoked, so do not call them with the Skill tool: for each stage, read that skill's SKILL.md in the installed mattpocock-skills plugin (under ~/.claude/plugins/cache/mattpocock/mattpocock-skills/) and follow it.",
   'Start with the grill stage (grill-with-docs). After each stage, go on to the next one (to-spec, to-tickets, implement, code-review, retro) without waiting to be asked; stop only for what the stage itself asks of the person.',
   `As you start each stage, call ${STAGE_TOOL} with its name (grill, spec, tickets, implement, review, retro); call it with "done" when the flow ends or the person drops it.`,
 ].join(' ')
 
-/** Sent with large implementation work: Claude runs the Main Flow from its first stage. */
-/** Sent with borderline work: Claude asks the person once, then runs the Main Flow if they choose it. */
+/** Sent with large or borderline work: Claude asks the person once, then runs the Main Flow if they choose it. */
 export const ASK_NOTE = [
-  "[open-effort] This request sits between a small change and large implementation work. Before any work, ask the person once with AskUserQuestion whether to take it through Matt Pocock's Main Flow (grill, spec, tickets, implement, review, retro) or to do it directly. Put the option you recommend first, marked as recommended: recommend the Main Flow when the change spans several files, needs new tests, or touches auth, money or data.",
+  "[open-effort] This request asks for more than a small change. Before any work, ask the person once with AskUserQuestion whether to take it through Matt Pocock's Main Flow (grill, spec, tickets, implement, review, retro) or to do it directly. Put the option you recommend first, marked as recommended: recommend the Main Flow when the change spans several files, needs new tests, or touches auth, money or data.",
   `If they choose the Main Flow: ${HOW_TO_RUN}`,
 ].join('\n')
 

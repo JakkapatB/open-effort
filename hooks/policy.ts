@@ -1,5 +1,5 @@
 import type { Clarity, Effort, ModelTier, Rung, Score, Stage, SubAgent, Task, TicketSetting } from '../types'
-import { isUnsure } from './score'
+import { MODEL_TIERS as TIERS, isUnsure } from './score'
 
 export const EFFORTS: readonly Effort[] = ['low', 'medium', 'high', 'xhigh', 'max']
 
@@ -18,8 +18,6 @@ export const FAILS_TO_STALL = 3
 
 /** The model a task moves to past the last effort rung on the session's model. */
 export const FABLE_MODEL = 'claude-fable-5-1'
-
-const TIERS: readonly ModelTier[] = ['haiku', 'sonnet', 'opus', 'fable']
 
 /** The model each family moves a task to: its current generation. */
 export const TIER_MODEL: Readonly<Record<ModelTier, string>> = {
@@ -54,7 +52,6 @@ function atLeast(effort: Effort, floor: Effort): Effort {
   return EFFORTS.indexOf(effort) < EFFORTS.indexOf(floor) ? floor : effort
 }
 
-/** An effort moved `by` notches, held between low and max. */
 /**
  * The efforts a model takes in `output_config.effort`, lowest first. Models of the current families take all five;
  * Opus and Sonnet 4.6 have no xhigh, Opus 4.5 stops at high, and Sonnet 4.5, Haiku 4.5 and older take none (the
@@ -76,6 +73,7 @@ export function fitEffort(effort: Effort, model: string | null): Effort {
   return [...takes].reverse().find(e => EFFORTS.indexOf(e) < at) ?? takes[0] ?? effort
 }
 
+/** An effort moved `by` notches, held between low and max. */
 export function notch(effort: Effort, by: number): Effort {
   const at = Math.min(Math.max(EFFORTS.indexOf(effort) + by, 0), EFFORTS.length - 1)
   return EFFORTS[at] ?? effort
@@ -131,29 +129,30 @@ export function enteredStage(task: Task, stage: Stage): Task {
 
 /**
  * Where a task stands: the rung a stall moved it to, else its starting point (its own effort, else `own`, the
- * session's), on Fable 5.1 once it reached it or when the session runs it; null with no effort to stand on.
+ * session's), on Fable 5.1 once it reached it or when `model`, the one the task runs on, is Fable; null with no
+ * effort to stand on.
  */
-export function rungOf(task: Task, own: Effort | null, sessionModel: string | null): Rung | null {
+export function rungOf(task: Task, own: Effort | null, model: string | null): Rung | null {
   if (task.climbed) return task.climbed
   const effort = task.effort ?? own
   if (!effort) return null
-  const onFable = task.isOnFable || isFable(sessionModel)
-  // An effort the session's model does not take goes out as the nearest one it does.
-  return { effort: onFable ? effort : fitEffort(effort, sessionModel), isFable: onFable }
+  const onFable = task.isOnFable || isFable(model)
+  // An effort the task's model does not take goes out as the nearest one it does.
+  return { effort: onFable ? effort : fitEffort(effort, model), isFable: onFable }
 }
 
 /**
- * The rung above: the next effort up to xhigh on the session's model, then Fable 5.1 at high, xhigh and max (on a
- * session already on Fable, its max); null at the top. Max on the session's model climbs to Fable.
+ * The rung above: the next effort up to xhigh on `model`, the one the task runs on, then Fable 5.1 at high, xhigh
+ * and max (on a task already on Fable, its max); null at the top. Max on the task's model climbs to Fable.
  */
-export function rungAbove(rung: Rung, sessionModel: string | null = null): Rung | null {
+export function rungAbove(rung: Rung, model: string | null = null): Rung | null {
   const at = EFFORTS.indexOf(rung.effort)
   if (rung.isFable) {
     const next = EFFORTS[at + 1]
     return next ? { effort: next, isFable: true } : null
   }
-  // On the session's model the ladder goes no higher than xhigh, and only through the efforts that model takes.
-  const next = supportedEfforts(sessionModel).find(effort => EFFORTS.indexOf(effort) > at && EFFORTS.indexOf(effort) <= EFFORTS.indexOf('xhigh'))
+  // On the task's model the ladder goes no higher than xhigh, and only through the efforts that model takes.
+  const next = supportedEfforts(model).find(effort => EFFORTS.indexOf(effort) > at && EFFORTS.indexOf(effort) <= EFFORTS.indexOf('xhigh'))
   return next ? { effort: next, isFable: false } : { effort: 'high', isFable: true }
 }
 
@@ -166,14 +165,14 @@ export function afterCheck(
   task: Task,
   passed: boolean,
   own: Effort | null,
-  sessionModel: string | null,
+  model: string | null,
 ): { task: Task; hasClimbed: boolean; hasReachedLadderEnd: boolean } {
   const unmoved = { hasClimbed: false, hasReachedLadderEnd: false }
   if (passed) return { task: task.climbed ? { ...task, climbed: null, fails: 0, isAtLadderEnd: false } : { ...task, fails: 0 }, ...unmoved }
   const fails = task.fails + 1
   if (fails < FAILS_TO_STALL) return { task: { ...task, fails }, ...unmoved }
-  const here = rungOf(task, own ?? 'medium', sessionModel) ?? { effort: 'medium', isFable: false }
-  const above = rungAbove(here, sessionModel)
+  const here = rungOf(task, own ?? 'medium', model) ?? { effort: 'medium', isFable: false }
+  const above = rungAbove(here, model)
   // An unscored task keeps the effort it climbed from as its starting point, so it can settle back to it.
   const effort = task.effort ?? (task.climbed ? null : here.effort)
   if (!above) return { task: { ...task, effort, fails: 0, isAtLadderEnd: true }, hasClimbed: false, hasReachedLadderEnd: !task.isAtLadderEnd }
@@ -212,7 +211,6 @@ export function afterAgentCheck(agent: SubAgent, passed: boolean): SubAgent {
   const climbed = EFFORTS.indexOf(here) < top ? notch(here, 1) : agent.climbed
   return { ...agent, climbed, fails: 0 }
 }
-
 
 /** A ticket file as /to-tickets names one: `<feature>/issues/03-coupon-rules.md`; its number is `03`. */
 const TICKET_FILE = /\/issues\/(\d+)-[^/\s]+\.md$/
