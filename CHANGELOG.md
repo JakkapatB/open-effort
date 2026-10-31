@@ -13,3 +13,4 @@ The first release.
 - Sub-agents by type: Explore on Haiku at low, Plan and general-purpose on the task's model.
 - A band above the prompt and a pane with switches, the Main Flow's model, language, four themes and a history chart.
 - English and Thai.
+- Measured results in the README: cost with the mod on and off, sub-agents, the Main Flow.
