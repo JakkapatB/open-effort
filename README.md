@@ -53,6 +53,19 @@ price.
 
 Nothing to set up: the band appears as soon as it is installed.
 
+## Try it
+
+Type these in a project of your own, and watch the band above the prompt. Haiku reads each request afresh, so a reading can differ a little from what is shown here.
+
+| You type | The band shows |
+|---|---|
+| `Rename getUser to fetchUser everywhere` | **Haiku read it · clear plan** → **Effort `low`** |
+| `Add a discount code field to checkout and check it on the server` | **goal known** → **Effort `medium`** |
+| `Two orders can both take the last item in stock. Find the race and fix it` | **unusually hard** → **Effort `xhigh`** |
+| `Add gift cards: a balance, an expiry date, paying part of an order, with tests` | Claude first asks whether to take it through the Main Flow (with Matt Pocock's skills installed). If you say yes, the band shows the stage track: **grill → spec → tickets → implement → review → retro**, each at its own effort |
+
+When a test run fails, the effort card shows **Check failed 1/3**, then **2/3**. On the third failure in a row the effort goes up one level, and the card says where it came from (**↑ from low**). The next passing run brings it back.
+
 ## How it works
 
 <p align="center">

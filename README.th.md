@@ -52,6 +52,19 @@
 
 ติดตั้งเสร็จใช้ได้เลย ไม่ต้องตั้งค่าเพิ่ม
 
+## ลองใช้
+
+ลองพิมพ์คำสั่งเหล่านี้ในโปรเจกต์ของคุณ แล้วดูแถบเหนือช่องแชท Haiku ประเมินทุกครั้งใหม่ ผลที่ได้จึงอาจต่างจากตารางนี้ได้เล็กน้อย
+
+| คุณพิมพ์ | แถบแสดง |
+|---|---|
+| `Rename getUser to fetchUser everywhere` | **Haiku อ่านแล้ว · แผนชัด** → **Effort `low`** |
+| `Add a discount code field to checkout and check it on the server` | **รู้เป้าหมาย** → **Effort `medium`** |
+| `Two orders can both take the last item in stock. Find the race and fix it` | **ยากพิเศษ** → **Effort `xhigh`** |
+| `Add gift cards: a balance, an expiry date, paying part of an order, with tests` | Claude จะถามก่อนว่าจะทำผ่าน Main Flow ไหม (ต้องติดตั้ง skill ของ Matt Pocock ไว้) ถ้าตอบว่าใช่ แถบจะแสดงขั้นตอน **grill → spec → tickets → implement → review → retro** และแต่ละขั้นตอนใช้ effort ของตัวเอง |
+
+เมื่อ test ไม่ผ่าน การ์ด effort จะขึ้นว่า **check ไม่ผ่าน 1/3** แล้วเป็น **2/3** พอไม่ผ่านครั้งที่ 3 ติดกัน effort จะเพิ่มขึ้นหนึ่งระดับ และการ์ดจะบอกว่าเพิ่มมาจากระดับไหน (**↑ จาก low**) พอ test ผ่าน effort จะกลับไปที่ระดับเดิม
+
 ## หลักการทำงาน
 
 <p align="center">
