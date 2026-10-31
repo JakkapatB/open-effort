@@ -84,10 +84,10 @@ The mod never picks `max` by itself.
 #### Sub-agents in the flow
 
 <p align="center">
-  <img src="docs/images/sub-agents-en.png" width="820" alt="Which sub-agents each Main Flow stage starts, and how each gets its model and effort: implement hands a ticket to a sub-agent at the ticket's Model and Effort; code-review runs two reviewers at xhigh on the session's model; otherwise Explore runs on Haiku at low, Plan at high, general-purpose at the stage's effort, and your own types are left as they are">
+  <img src="docs/images/sub-agents-en.png" width="820" alt="Which sub-agents each Main Flow stage starts, and how each gets its model and effort: implement hands a ticket to a sub-agent at the ticket's Model and Effort; code-review runs two reviewers at xhigh on the Main Flow's model; otherwise Explore runs on Haiku at low, Plan on the task's model at high, general-purpose on the task's model at the stage's effort, and your own types are left as they are">
 </p>
 
-A sub-agent's effort follows the stage it runs in: the code-review reviewers run at `xhigh` because the review stage does. Apart from Explore, which always runs on Haiku, only a ticket can put a sub-agent on another model.
+A general-purpose sub-agent's effort follows the stage it runs in: the code-review reviewers run at `xhigh` because the review stage does. Plan and general-purpose sub-agents run on the task's model, so in the Main Flow they use its model (Opus 5.5 by default) even on a Sonnet session. Explore always runs on Haiku, and a ticket's sub-agent runs on the ticket's model.
 
 ## The pane
 

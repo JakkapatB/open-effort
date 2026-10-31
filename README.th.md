@@ -84,10 +84,12 @@ mod จะไม่เลือก `max` ให้เอง
 #### sub-agent ใน Main Flow
 
 <p align="center">
-  <img src="docs/images/sub-agents-th.png" width="820" alt="แต่ละขั้นตอนของ Main Flow เรียก sub-agent อะไร และแต่ละตัวได้โมเดลกับ effort มาจากไหน: implement ส่ง ticket ให้ sub-agent ทำตาม Model และ Effort ของ ticket, code-review ใช้ผู้รีวิว 2 ตัวที่ xhigh บนโมเดลของ session, นอกนั้น Explore ใช้ Haiku ที่ low, Plan ใช้ high, general-purpose ใช้ effort ของขั้นตอนนั้น และแบบที่คุณสร้างเองไม่ปรับ">
+  <img src="docs/images/sub-agents-th.png" width="820" alt="แต่ละขั้นตอนของ Main Flow เรียก sub-agent อะไร และแต่ละตัวได้โมเดลกับ effort มาจากไหน: implement ส่ง ticket ให้ sub-agent ทำตาม Model และ Effort ของ ticket, code-review ใช้ผู้รีวิว 2 ตัวที่ xhigh บนโมเดลของ Main Flow, นอกนั้น Explore ใช้ Haiku ที่ low, Plan ใช้โมเดลของงานที่ high, general-purpose ใช้โมเดลของงานกับ effort ของขั้นตอนนั้น และแบบที่คุณสร้างเองไม่ปรับ">
 </p>
 
-effort ของ sub-agent จะเท่ากับ effort ของขั้นตอนที่มันทำงานอยู่ เช่น ผู้รีวิวของ code-review ใช้ `xhigh` เพราะขั้นตอน review ใช้ `xhigh` ส่วนโมเดล นอกจาก Explore ที่ใช้ Haiku เสมอ มีแค่ ticket ที่ทำให้ sub-agent ใช้โมเดลอื่นได้
+effort ของ sub-agent แบบ general-purpose จะเท่ากับ effort ของขั้นตอนที่มันทำงานอยู่ เช่น ผู้รีวิวของ code-review ใช้ `xhigh` เพราะขั้นตอน review ใช้ `xhigh`
+
+ส่วนโมเดล sub-agent แบบ Plan และ general-purpose จะใช้โมเดลเดียวกับงาน ถ้าอยู่ใน Main Flow ก็จะใช้โมเดลของ Main Flow (ค่าเริ่มต้นคือ Opus 5.5) แม้ session จะเป็น Sonnet ส่วน Explore ใช้ Haiku เสมอ และ sub-agent ที่ได้รับ ticket จะใช้โมเดลตามที่ ticket ระบุ
 
 ## Pane
 
