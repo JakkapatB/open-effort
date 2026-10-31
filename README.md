@@ -25,6 +25,22 @@
 - 🗺️ **Runs Matt Pocock's Main Flow.** Grill to retro, every stage and every ticket at its own effort.
 - 👀 **Shows what it uses, and why.** A band above the prompt shows the effort and model in use; a pane holds the switches, themes and history.
 
+## What it changes, measured
+
+Sessions on Opus 5.5 at `high`, the same tasks with the mod on and off (a sample shop project; 61 sessions in all):
+
+| | Off | On |
+|---|---|---|
+| Cost, 5 coding tasks run twice | $5.65 | $5.00 (**−11%**) |
+| Cost, the same tasks in an earlier round | $3.96 | $3.79 (**−4%**) |
+| Tasks passing hidden checks | all | all |
+| An Explore sub-agent's cost | $0.41 (Opus, `high`) | $0.09 (Haiku, `low`, **−78%**) |
+| Main Flow: effort per stage and per ticket | — | as set, every stage and ticket |
+
+Each task ran once or twice, so the cost figures move from run to run. Raising the effort when stuck is not yet
+measured: every task passed on its first try, with and without the mod. Cost is worked out from the tokens at list
+price.
+
 ## Install
 
 **Desktop app:** **+** next to the prompt → **Plugins** → **Add marketplace** → `JakkapatB/open-effort` → **Add plugin**.
