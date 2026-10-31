@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/images/icon.png" width="96" alt="open-effort">
+  <img src="https://raw.githubusercontent.com/JakkapatB/open-effort/main/docs/images/icon.png" width="96" alt="open-effort">
 </p>
 
 <h1 align="center">open-effort</h1>
@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/band.png" width="760" alt="แถบเหนือช่องแชท แสดงผลที่ Haiku ประเมิน, effort ที่เพิ่มเป็น high บน Opus 5.5 และ sub-agent 3 ตัวที่กำลังทำงาน">
+  <img src="https://raw.githubusercontent.com/JakkapatB/open-effort/main/docs/images/band.png" width="760" alt="แถบเหนือช่องแชท แสดงผลที่ Haiku ประเมิน, effort ที่เพิ่มเป็น high บน Opus 5.5 และ sub-agent 3 ตัวที่กำลังทำงาน">
 </p>
 
 ## ฟีเจอร์
@@ -55,19 +55,19 @@
 ## หลักการทำงาน
 
 <p align="center">
-  <img src="docs/images/flow-th.png" width="900" alt="ภาพรวมทั้งหมด: ข้อความที่ต่องานเดิมใช้งานเดิมต่อ ส่วนงานใหม่ Haiku จะดูแล้วเลือก effort เริ่มต้น Claude ถามเรื่องโมเดลและ Main Flow ก่อน แล้วเริ่มทำงาน test ผ่านกลับไป effort เริ่มต้น ไม่ผ่านติดกัน 3 ครั้งเพิ่มขึ้นหนึ่งระดับ เกิน xhigh เปลี่ยนไป Fable 5.1 และถ้ายังไม่ผ่านที่ max Claude หยุดทำแล้วถามคุณ พร้อม Main Flow, ticket, sub-agent และประวัติ">
+  <img src="https://raw.githubusercontent.com/JakkapatB/open-effort/main/docs/images/flow-th.png" width="900" alt="ภาพรวมทั้งหมด: ข้อความที่ต่องานเดิมใช้งานเดิมต่อ ส่วนงานใหม่ Haiku จะดูแล้วเลือก effort เริ่มต้น Claude ถามเรื่องโมเดลและ Main Flow ก่อน แล้วเริ่มทำงาน test ผ่านกลับไป effort เริ่มต้น ไม่ผ่านติดกัน 3 ครั้งเพิ่มขึ้นหนึ่งระดับ เกิน xhigh เปลี่ยนไป Fable 5.1 และถ้ายังไม่ผ่านที่ max Claude หยุดทำแล้วถามคุณ พร้อม Main Flow, ticket, sub-agent และประวัติ">
 </p>
 
 ### ลำดับการเพิ่ม effort
 
 <p align="center">
-  <img src="docs/images/ladder-th.png" width="820" alt="low, medium, high, xhigh แล้วเปลี่ยนไป Fable 5.1 ที่ high, xhigh, max ถ้ายังไม่ผ่านอีก Claude จะหยุดทำ แล้วถามคุณ">
+  <img src="https://raw.githubusercontent.com/JakkapatB/open-effort/main/docs/images/ladder-th.png" width="820" alt="low, medium, high, xhigh แล้วเปลี่ยนไป Fable 5.1 ที่ high, xhigh, max ถ้ายังไม่ผ่านอีก Claude จะหยุดทำ แล้วถามคุณ">
 </p>
 
 พอ test ผ่าน effort จะกลับไปที่ระดับเริ่มต้นของงานนั้น
 
 <p align="center">
-  <img src="docs/images/states-th.png" width="760" alt="หน้าตาของแถบในแต่ละสถานะ: เลือก effort เริ่มต้น, test ไม่ผ่าน, เพิ่ม effort, เปลี่ยนไป Fable 5.1 และ Claude หยุดทำแล้วถามคุณ">
+  <img src="https://raw.githubusercontent.com/JakkapatB/open-effort/main/docs/images/states-th.png" width="760" alt="หน้าตาของแถบในแต่ละสถานะ: เลือก effort เริ่มต้น, test ไม่ผ่าน, เพิ่ม effort, เปลี่ยนไป Fable 5.1 และ Claude หยุดทำแล้วถามคุณ">
 </p>
 
 ### effort เริ่มต้น
@@ -85,7 +85,7 @@ mod จะไม่เลือก `max` ให้เอง
 ### Main Flow ของ Matt Pocock
 
 <p align="center">
-  <img src="docs/images/main-flow.png" width="760" alt="Main Flow อยู่ที่ขั้นตอน implement กำลังทำ ticket 03 ด้วย effort high">
+  <img src="https://raw.githubusercontent.com/JakkapatB/open-effort/main/docs/images/main-flow.png" width="760" alt="Main Flow อยู่ที่ขั้นตอน implement กำลังทำ ticket 03 ด้วย effort high">
 </p>
 
 | ขั้นตอน | grill | spec | tickets | implement | review | retro |
@@ -104,7 +104,7 @@ mod จะไม่เลือก `max` ให้เอง
 #### sub-agent ใน Main Flow
 
 <p align="center">
-  <img src="docs/images/sub-agents-th.png" width="820" alt="แต่ละขั้นตอนของ Main Flow เรียก sub-agent อะไร และแต่ละตัวได้โมเดลกับ effort มาจากไหน: implement ส่ง ticket ให้ sub-agent ทำตาม Model และ Effort ของ ticket, code-review ใช้ผู้รีวิว 2 ตัวที่ xhigh บนโมเดลของ Main Flow, นอกนั้น Explore ใช้ Haiku ที่ low, Plan ใช้โมเดลของงานที่ high, general-purpose ใช้โมเดลของงานกับ effort ของขั้นตอนนั้น และแบบที่คุณสร้างเองไม่ปรับ">
+  <img src="https://raw.githubusercontent.com/JakkapatB/open-effort/main/docs/images/sub-agents-th.png" width="820" alt="แต่ละขั้นตอนของ Main Flow เรียก sub-agent อะไร และแต่ละตัวได้โมเดลกับ effort มาจากไหน: implement ส่ง ticket ให้ sub-agent ทำตาม Model และ Effort ของ ticket, code-review ใช้ผู้รีวิว 2 ตัวที่ xhigh บนโมเดลของ Main Flow, นอกนั้น Explore ใช้ Haiku ที่ low, Plan ใช้โมเดลของงานที่ high, general-purpose ใช้โมเดลของงานกับ effort ของขั้นตอนนั้น และแบบที่คุณสร้างเองไม่ปรับ">
 </p>
 
 effort ของ sub-agent แบบ general-purpose จะเท่ากับ effort ของขั้นตอนที่มันทำงานอยู่ เช่น ผู้รีวิวของ code-review ใช้ `xhigh` เพราะขั้นตอน review ใช้ `xhigh`
@@ -137,7 +137,7 @@ effort ของ sub-agent แบบ general-purpose จะเท่ากับ
 เปิดด้วยคำสั่ง `/open-effort` หรือกดปุ่ม **≡** บนแถบ
 
 <p align="center">
-  <img src="docs/images/history.png" width="520" alt="กราฟประวัติ แสดง effort ตอนเริ่มและตอนที่เพิ่มขึ้นของแต่ละ turn และจำนวน turn แยกตามโมเดลกับ effort">
+  <img src="https://raw.githubusercontent.com/JakkapatB/open-effort/main/docs/images/history.png" width="520" alt="กราฟประวัติ แสดง effort ตอนเริ่มและตอนที่เพิ่มขึ้นของแต่ละ turn และจำนวน turn แยกตามโมเดลกับ effort">
 </p>
 
 - **เปิด/ปิด** สำหรับโปรเจกต์นี้ (หรือพิมพ์ `/open-effort on` / `off`)
@@ -147,7 +147,7 @@ effort ของ sub-agent แบบ general-purpose จะเท่ากับ
 - **ประวัติ:** 500 turn ล่าสุดของโปรเจกต์
 
 <p align="center">
-  <img src="docs/images/themes.png" width="640" alt="ธีมสี 4 แบบ: Claude, มะนาว, ฟ้า และ ชมพู">
+  <img src="https://raw.githubusercontent.com/JakkapatB/open-effort/main/docs/images/themes.png" width="640" alt="ธีมสี 4 แบบ: Claude, มะนาว, ฟ้า และ ชมพู">
 </p>
 
 <details>

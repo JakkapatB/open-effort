@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/images/icon.png" width="96" alt="open-effort">
+  <img src="https://raw.githubusercontent.com/JakkapatB/open-effort/main/docs/images/icon.png" width="96" alt="open-effort">
 </p>
 
 <h1 align="center">open-effort</h1>
@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/band.png" width="760" alt="The band above the prompt: Haiku's reading, the effort climbing to high on Opus 5.5, and three sub-agents at work">
+  <img src="https://raw.githubusercontent.com/JakkapatB/open-effort/main/docs/images/band.png" width="760" alt="The band above the prompt: Haiku's reading, the effort climbing to high on Opus 5.5, and three sub-agents at work">
 </p>
 
 ## What it does
@@ -56,19 +56,19 @@ Nothing to set up: the band appears as soon as it is installed.
 ## How it works
 
 <p align="center">
-  <img src="docs/images/flow-en.png" width="900" alt="The whole flow: a request is kept in the task or read by Haiku; a new task gets a starting effort, Claude asks about a stronger model and the Main Flow, Claude works, a passing check returns to the starting effort, three failures raise it one level, past xhigh it switches to Fable 5.1, and still failing at max Claude stops and asks you; the Main Flow, tickets, sub-agents and history are shown beside it">
+  <img src="https://raw.githubusercontent.com/JakkapatB/open-effort/main/docs/images/flow-en.png" width="900" alt="The whole flow: a request is kept in the task or read by Haiku; a new task gets a starting effort, Claude asks about a stronger model and the Main Flow, Claude works, a passing check returns to the starting effort, three failures raise it one level, past xhigh it switches to Fable 5.1, and still failing at max Claude stops and asks you; the Main Flow, tickets, sub-agents and history are shown beside it">
 </p>
 
 ### The ladder
 
 <p align="center">
-  <img src="docs/images/ladder-en.png" width="820" alt="low, medium, high, xhigh, then Fable 5.1 at high, xhigh and max; if checks still fail, Claude stops and asks you">
+  <img src="https://raw.githubusercontent.com/JakkapatB/open-effort/main/docs/images/ladder-en.png" width="820" alt="low, medium, high, xhigh, then Fable 5.1 at high, xhigh and max; if checks still fail, Claude stops and asks you">
 </p>
 
 When a check passes, the effort goes back to the level the task started at.
 
 <p align="center">
-  <img src="docs/images/states.png" width="760" alt="The band in each state: scored, a failing check, a climb, Fable 5.1, and stopped at the top">
+  <img src="https://raw.githubusercontent.com/JakkapatB/open-effort/main/docs/images/states.png" width="760" alt="The band in each state: scored, a failing check, a climb, Fable 5.1, and stopped at the top">
 </p>
 
 ### Starting effort
@@ -86,7 +86,7 @@ The mod never picks `max` by itself.
 ### Matt Pocock's Main Flow
 
 <p align="center">
-  <img src="docs/images/main-flow.png" width="760" alt="The Main Flow track at the implement stage, working ticket 03 at high">
+  <img src="https://raw.githubusercontent.com/JakkapatB/open-effort/main/docs/images/main-flow.png" width="760" alt="The Main Flow track at the implement stage, working ticket 03 at high">
 </p>
 
 | Stage | grill | spec | tickets | implement | review | retro |
@@ -105,7 +105,7 @@ The mod never picks `max` by itself.
 #### Sub-agents in the flow
 
 <p align="center">
-  <img src="docs/images/sub-agents-en.png" width="820" alt="Which sub-agents each Main Flow stage starts, and how each gets its model and effort: implement hands a ticket to a sub-agent at the ticket's Model and Effort; code-review runs two reviewers at xhigh on the Main Flow's model; otherwise Explore runs on Haiku at low, Plan on the task's model at high, general-purpose on the task's model at the stage's effort, and your own types are left as they are">
+  <img src="https://raw.githubusercontent.com/JakkapatB/open-effort/main/docs/images/sub-agents-en.png" width="820" alt="Which sub-agents each Main Flow stage starts, and how each gets its model and effort: implement hands a ticket to a sub-agent at the ticket's Model and Effort; code-review runs two reviewers at xhigh on the Main Flow's model; otherwise Explore runs on Haiku at low, Plan on the task's model at high, general-purpose on the task's model at the stage's effort, and your own types are left as they are">
 </p>
 
 A general-purpose sub-agent's effort follows the stage it runs in: the code-review reviewers run at `xhigh` because the review stage does. Plan and general-purpose sub-agents run on the task's model, so in the Main Flow they use its model (Opus 5.5 by default) even on a Sonnet session. Explore always runs on Haiku, and a ticket's sub-agent runs on the ticket's model. A new sub-agent starts where the task started, not at a climb the main session made.
@@ -136,7 +136,7 @@ Three failing checks in a row raise the effort one level; a passing check brings
 Open it with `/open-effort` or the band's **≡**.
 
 <p align="center">
-  <img src="docs/images/history.png" width="520" alt="The history chart: the effort each turn started at and climbed to, and turns by model and effort">
+  <img src="https://raw.githubusercontent.com/JakkapatB/open-effort/main/docs/images/history.png" width="520" alt="The history chart: the effort each turn started at and climbed to, and turns by model and effort">
 </p>
 
 - **On or off** for this project (`/open-effort on|off` does the same).
@@ -146,7 +146,7 @@ Open it with `/open-effort` or the band's **≡**.
 - **History:** the last 500 turns of this project.
 
 <p align="center">
-  <img src="docs/images/themes.png" width="640" alt="The four themes: Claude, Lime, Ocean and Rose">
+  <img src="https://raw.githubusercontent.com/JakkapatB/open-effort/main/docs/images/themes.png" width="640" alt="The four themes: Claude, Lime, Ocean and Rose">
 </p>
 
 <details>
