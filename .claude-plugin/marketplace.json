@@ -1,0 +1,14 @@
+{
+  "name": "open-effort",
+  "description": "open-effort: Claude Code's effort fitted to the work in front of it",
+  "owner": {
+    "name": "JakkapatB",
+    "url": "https://github.com/JakkapatB"
+  },
+  "plugins": [
+    {
+      "name": "open-effort",
+      "source": "./"
+    }
+  ]
+}

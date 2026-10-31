@@ -1,0 +1,20 @@
+{
+  "name": "open-effort",
+  "version": "0.1.0",
+  "description": "Sets Claude's effort to fit the work in front of it, and moves to a stronger model only when the highest effort is not enough",
+  "author": {
+    "name": "JakkapatB",
+    "url": "https://github.com/JakkapatB"
+  },
+  "license": "MIT",
+  "types": "./types/index.d.ts",
+  "repository": "https://github.com/JakkapatB/open-effort",
+  "homepage": "https://github.com/JakkapatB/open-effort",
+  "keywords": [
+    "effort",
+    "model",
+    "claude-code",
+    "mod",
+    "main-flow"
+  ]
+}
