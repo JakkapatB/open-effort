@@ -21,6 +21,9 @@ const CASES: readonly (readonly [string, string, 'none' | 'untrusted' | 'counted
   ['a check word inside quotes', 'echo "run npm test later"', 'none'],
   ['node’s own test runner', 'node --test persist.test.js', 'counted'],
   ['no check', 'ls -la && git status', 'none'],
+  ['a check with a | inside quotes', 'npm test -- -t "a|b"', 'counted'],
+  ['a check whose exit ! turns round', '! npm test', 'untrusted'],
+  ['a check in a group whose exit ! turns round', '! (npm test)', 'untrusted'],
 ]
 
 for (const [name, command, expected] of CASES) {

@@ -26,6 +26,43 @@ function runsCheck(part: string): boolean {
   return CHECKS.some(check => check.test(bare))
 }
 
+/** Whether a statement negates its exit, `! npm test`: its pass is the check's failure. */
+function isNegated(statement: string): boolean {
+  return /^[({\s]*!\s/.test(statement)
+}
+
+/** A statement's pipeline parts: split on `|` outside quotes, not on `||` (statementsOf took those). */
+function pipeParts(statement: string): string[] {
+  const parts: string[] = []
+  let part = ''
+  let quote: string | null = null
+  for (let i = 0; i < statement.length; i++) {
+    const c = statement[i] ?? ''
+    if (quote) {
+      if (c === '\\' && quote === '"') {
+        part += c + (statement[i + 1] ?? '')
+        i++
+        continue
+      }
+      if (c === quote) quote = null
+      part += c
+    } else if (c === "'" || c === '"') {
+      quote = c
+      part += c
+    } else if (c === '\\') {
+      part += c + (statement[i + 1] ?? '')
+      i++
+    } else if (c === '|') {
+      parts.push(part)
+      part = ''
+    } else {
+      part += c
+    }
+  }
+  parts.push(part)
+  return parts
+}
+
 type Operator = '&&' | '||' | ';' | '&'
 
 /**
@@ -85,11 +122,11 @@ function statementsOf(command: string): { text: string; after: Operator | null }
  * What a Bash command's exit says about the checks in it: `none` when it runs no check; `counted` when its exit is
  * the checks' pass or fail; `untrusted` when it may not be: something runs after a check whatever its result (`;`,
  * a new line, `||`), a check runs only when something before it failed (`||`), a pipe follows a check without
- * pipefail, or it runs in the background.
+ * pipefail, `!` turns its exit round, or it runs in the background.
  */
 export function checkRun(command: string, isBackground = false): 'none' | 'untrusted' | 'counted' {
   const statements = statementsOf(command)
-  const checks = statements.flatMap((statement, at) => (statement.text.split('|').some(runsCheck) ? [at] : []))
+  const checks = statements.flatMap((statement, at) => (pipeParts(statement.text).some(runsCheck) ? [at] : []))
   if (checks.length === 0) return 'none'
   if (isBackground) return 'untrusted'
   const first = checks[0] ?? 0
@@ -97,8 +134,10 @@ export function checkRun(command: string, isBackground = false): 'none' | 'untru
   const isFollowedSafely = statements.slice(first).every((statement, k) => statement.after === null || (statement.after === '&&' && first + k < statements.length - 1))
   const isReachedSafely = first === 0 || statements[first - 1]?.after !== '||'
   const isPipedOn = checks.some(at => {
-    const parts = (statements[at]?.text ?? '').split('|')
+    const parts = pipeParts(statements[at]?.text ?? '')
     return parts.findIndex(runsCheck) < parts.length - 1
   }) && !/pipefail/.test(command)
-  return isFollowedSafely && isReachedSafely && !isPipedOn ? 'counted' : 'untrusted'
+  // `! npm test` turns the check's failure into the command's pass.
+  const isTurned = checks.some(at => isNegated(statements[at]?.text ?? ''))
+  return isFollowedSafely && isReachedSafely && !isPipedOn && !isTurned ? 'counted' : 'untrusted'
 }
