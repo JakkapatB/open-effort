@@ -101,14 +101,17 @@ test('the history is kept per project', async ($, on) => {
 })
 
 test('the history keeps the last 500 turns', async ($, on) => {
-  engine(on, { haiku: GOAL })
+  // 501 turns already kept; one more finished turn drops the two oldest.
+  const old = Array.from({ length: 501 }, (_, i) => ({ at: i, mode: 'normal', score: null, stage: null, start: 'high', efforts: ['high'], models: ['claude-opus-5-5'], climbs: 0 }))
+  const { store } = engine(on, { haiku: GOAL, store: { 'history:/work/app': old } })
   await start($)
   await type($, 'add a coupon field')
-  for (let i = 0; i < 502; i++) {
-    await request($, 'high', i)
-    await finish($)
-  }
+  await request($, 'high', 0)
+  await finish($)
 
+  const kept = store.get('history:/work/app') as { at: number }[]
+  expect(kept.length).toBe(500)
+  expect(kept[0]?.at).toBe(2)
   expect(await paneText($)).toContain('500')
 })
 
