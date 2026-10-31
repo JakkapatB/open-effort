@@ -189,6 +189,8 @@ Test, typecheck, build and lint runs (JavaScript/TypeScript, Python, Go, Rust, N
 | `command.run` on `open-effort` | Answers the mod's own `/open-effort` command | It is the mod's own command |
 | `ui.render` | Draws the band above the prompt and the pane | Adds the band and the pane |
 
+**Other calls.** Pressing a sub-agent's name in the band calls `$.ui.view`, which switches Claude Code's own view to that sub-agent's transcript, as its task list does. It sends nothing anywhere. The desktop app has no such view, so there the names are labels and nothing is called.
+
 **Another plugin.** The Main Flow is Matt Pocock's `mattpocock-skills` plugin. The mod lists your installed commands to see whether it is there, and reacts when Claude uses one of its skills. It never calls that plugin's code.
 
 ### Limits
