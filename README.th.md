@@ -46,7 +46,7 @@
 ### ลำดับการเพิ่ม effort
 
 <p align="center">
-  <img src="docs/images/ladder-th.png" width="640" alt="low, medium, high, xhigh แล้วเปลี่ยนไป Fable 5.1 ที่ high, xhigh, max ถ้ายังไม่ผ่านอีก Claude จะหยุดทำ แล้วถามคุณ">
+  <img src="docs/images/ladder-th.png" width="820" alt="low, medium, high, xhigh แล้วเปลี่ยนไป Fable 5.1 ที่ high, xhigh, max ถ้ายังไม่ผ่านอีก Claude จะหยุดทำ แล้วถามคุณ">
 </p>
 
 พอ test ผ่าน effort จะกลับไปที่ระดับเริ่มต้นของงานนั้น

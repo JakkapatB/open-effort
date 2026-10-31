@@ -46,7 +46,7 @@ Nothing to set up: the band appears as soon as it is installed.
 ### The ladder
 
 <p align="center">
-  <img src="docs/images/ladder-en.png" width="640" alt="low, medium, high, xhigh, then Fable 5.1 at high, xhigh and max; if checks still fail, Claude stops and asks you">
+  <img src="docs/images/ladder-en.png" width="820" alt="low, medium, high, xhigh, then Fable 5.1 at high, xhigh and max; if checks still fail, Claude stops and asks you">
 </p>
 
 When a check passes, the effort goes back to the level the task started at.
