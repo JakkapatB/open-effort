@@ -43,15 +43,21 @@ price.
 
 ## Install
 
-**Desktop app:** **+** next to the prompt → **Plugins** → **Add marketplace** → `JakkapatB/open-effort` → **Add plugin**.
+**In a shell** (one line, for Claude Code in the terminal and the desktop app alike):
 
-**Terminal:**
+```bash
+claude plugin marketplace add JakkapatB/open-effort && claude plugin install open-effort@open-effort
+```
+
+**Or inside Claude Code in the terminal:**
 
 ```
 /plugin install open-effort --marketplace JakkapatB/open-effort
 ```
 
-Nothing to set up: the band appears as soon as it is installed.
+**Or in the desktop app:** **Settings** → **Customize** → **Plugins** → **+ Add** → **Add marketplace** → `JakkapatB/open-effort` → **Sync**, then install **open-effort**.
+
+Nothing to set up: start a new session and the band appears above the prompt.
 
 ## Try it
 
