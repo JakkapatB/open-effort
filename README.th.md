@@ -190,6 +190,8 @@ effort ของ sub-agent แบบ general-purpose จะเท่ากับ
 | `command.run` ที่ `open-effort` | ตอบคำสั่ง `/open-effort` ของ mod เอง | เป็นคำสั่งของ mod เอง |
 | `ui.render` | วาดแถบเหนือช่องแชทและ pane | เพิ่มแถบและ pane |
 
+**คำสั่งอื่น:** เมื่อคุณกดชื่อ sub-agent บนแถบ mod จะเรียก `$.ui.view` เพื่อสลับหน้าจอของ Claude Code ไปแสดง transcript ของ sub-agent ตัวนั้น เหมือนกดจากรายการ task ของ Claude Code เอง คำสั่งนี้ไม่ได้ส่งข้อมูลออกไปไหน ส่วนในแอป desktop ไม่มีหน้าจอแบบนี้ ชื่อ sub-agent จึงเป็นข้อความธรรมดา และไม่มีการเรียกคำสั่งนี้
+
 **plugin อื่นที่เกี่ยวข้อง:** Main Flow มาจาก plugin `mattpocock-skills` ของ Matt Pocock mod ดูรายการคำสั่งที่ติดตั้งไว้ว่ามี plugin นี้หรือไม่ และปรับ effort เมื่อ Claude ใช้ skill ของ plugin นี้ โดยไม่ได้เรียกโค้ดของ plugin นั้นเลย
 
 ### ข้อจำกัด
