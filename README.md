@@ -78,6 +78,7 @@ The mod never picks `max` by itself.
 | Effort | `high` | `high` | `medium` | `high` | `xhigh` | `medium` |
 
 - The flow starts only when you choose it, when Claude asks, or when you type a stage's command.
+- Work you choose to do directly keeps the same care: when Claude uses one of the flow's skills on it (code-review, tdd), the task keeps at least that stage's effort and moves to the flow's model, for the rest of the task. The band shows it as "Matt's skill · direct".
 - The flow runs on **Opus 5.5** by default. Pick **Fable 5.1** or **the session's model** in the pane.
 - Each ticket can set its own `Model:` and `Effort:`. A sub-agent given a ticket uses the model and effort the ticket sets.
 - Needs [Matt Pocock's skills](https://github.com/mattpocock/skills). The pane says which are missing.
@@ -96,7 +97,7 @@ A general-purpose sub-agent's effort follows the stage it runs in: the code-revi
 |---|---|
 | **Your session's model** (the one you picked with `/model`) | Everything, unless a row below says otherwise |
 | **A stronger model Haiku suggests** | The whole task, only if you say yes when Claude asks at the start |
-| **Opus 5.5** | The whole Main Flow (change it in the pane). A session already on a stronger model keeps it |
+| **Opus 5.5** | The whole Main Flow (change it in the pane), and direct work once Claude uses one of the flow's skills on it. A session already on a stronger model keeps it |
 | **Fable 5.1** | After the effort goes past `xhigh` and checks still fail; in the Main Flow if you pick it; for a ticket that says `Model: fable`; a ticket's sub-agent that climbs that far |
 | **Haiku** | Reading each new request and each ticket without `Model:` and `Effort:` lines; Explore sub-agents; tickets that say `Model: haiku` |
 | **A ticket's `Model:`** | The sub-agent that works that ticket. When Claude works a ticket itself, it keeps the task's model |
@@ -134,7 +135,7 @@ Open it with `/open-effort` or the band's **≡**.
 
 ### One model per task
 
-A task keeps one model from start to end, so the prompt cache holds. It changes only when you agree to a stronger model at the start, when it enters the Main Flow, or when the effort goes past `xhigh` and it switches to Fable 5.1. It never switches to a weaker model by itself.
+A task keeps one model from start to end, so the prompt cache holds. It changes only when you agree to a stronger model at the start, when it enters the Main Flow, when Claude uses one of the flow's skills on work you do directly, or when the effort goes past `xhigh` and it switches to Fable 5.1. It never switches to a weaker model by itself.
 
 ### Models and effort
 
