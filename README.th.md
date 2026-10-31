@@ -81,6 +81,14 @@ mod จะไม่เลือก `max` ให้เอง
 - แต่ละ ticket กำหนด `Model:` และ `Effort:` ของตัวเองได้ ถ้าส่ง ticket ให้ sub-agent ทำ sub-agent จะใช้โมเดลและ effort ตามที่ ticket ระบุ
 - ต้องติดตั้ง [skill ของ Matt Pocock](https://github.com/mattpocock/skills) ก่อน ถ้ายังไม่ครบ pane จะบอกว่าขาดตัวไหน
 
+#### sub-agent ใน Main Flow
+
+<p align="center">
+  <img src="docs/images/sub-agents-th.png" width="820" alt="แต่ละขั้นตอนของ Main Flow เรียก sub-agent อะไร และแต่ละตัวได้โมเดลกับ effort มาจากไหน: implement ส่ง ticket ให้ sub-agent ทำตาม Model และ Effort ของ ticket, code-review ใช้ผู้รีวิว 2 ตัวที่ xhigh บนโมเดลของ session, นอกนั้น Explore ใช้ Haiku ที่ low, Plan ใช้ high, general-purpose ใช้ effort ของขั้นตอนนั้น และแบบที่คุณสร้างเองไม่ปรับ">
+</p>
+
+effort ของ sub-agent จะเท่ากับ effort ของขั้นตอนที่มันทำงานอยู่ เช่น ผู้รีวิวของ code-review ใช้ `xhigh` เพราะขั้นตอน review ใช้ `xhigh` ส่วนโมเดล นอกจาก Explore ที่ใช้ Haiku เสมอ มีแค่ ticket ที่ทำให้ sub-agent ใช้โมเดลอื่นได้
+
 ## Pane
 
 เปิดด้วยคำสั่ง `/open-effort` หรือกดปุ่ม **≡** บนแถบ
@@ -113,15 +121,6 @@ mod จะไม่เลือก `max` ให้เอง
 ### คำสั่งแบบไหนที่นับ
 
 นับ test, typecheck, build และ lint (JavaScript/TypeScript, Python, Go, Rust, test ของ Node และ make) โดยนับเฉพาะเมื่อคำสั่งนั้นเป็นตัวตัดสินว่าทั้งบรรทัดผ่านหรือไม่ผ่าน คืออยู่ท้ายสุด หรือต่อด้วย `&&` เท่านั้น ถ้ามี `;` หรือ `||` ต่อท้าย, ส่งต่อด้วย `|` โดยไม่ได้ตั้ง `set -o pipefail` หรือรันเป็น background จะไม่นับ
-
-### sub-agent
-
-| sub-agent | โมเดล · effort |
-|---|---|
-| Explore | Haiku · `low` |
-| Plan | โมเดลเดียวกับ session · `high` |
-| general-purpose | โมเดลเดียวกับ session · effort เท่ากับงานหลัก |
-| แบบที่คุณสร้างเอง | ไม่ปรับให้ |
 
 ### ข้อมูลและความเป็นส่วนตัว
 

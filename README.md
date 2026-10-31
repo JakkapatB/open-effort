@@ -81,6 +81,14 @@ The mod never picks `max` by itself.
 - Each ticket can set its own `Model:` and `Effort:`. A sub-agent given a ticket uses the model and effort the ticket sets.
 - Needs [Matt Pocock's skills](https://github.com/mattpocock/skills). The pane says which are missing.
 
+#### Sub-agents in the flow
+
+<p align="center">
+  <img src="docs/images/sub-agents-en.png" width="820" alt="Which sub-agents each Main Flow stage starts, and how each gets its model and effort: implement hands a ticket to a sub-agent at the ticket's Model and Effort; code-review runs two reviewers at xhigh on the session's model; otherwise Explore runs on Haiku at low, Plan at high, general-purpose at the stage's effort, and your own types are left as they are">
+</p>
+
+A sub-agent's effort follows the stage it runs in: the code-review reviewers run at `xhigh` because the review stage does. Apart from Explore, which always runs on Haiku, only a ticket can put a sub-agent on another model.
+
 ## The pane
 
 Open it with `/open-effort` or the band's **≡**.
@@ -113,15 +121,6 @@ The current models take all five efforts. Opus and Sonnet 4.6 have no `xhigh`, O
 ### What counts as a check
 
 Test, typecheck, build and lint runs (JavaScript/TypeScript, Python, Go, Rust, Node's test runner, make). A check counts only when its result is the command's result: not after `;` or `||`, not piped without `set -o pipefail`, not in the background.
-
-### Sub-agents
-
-| Sub-agent | Model · effort |
-|---|---|
-| Explore | Haiku · `low` |
-| Plan | session's model · `high` |
-| general-purpose | session's model · the main effort |
-| your own types | left as they are |
 
 ### Data and privacy
 
