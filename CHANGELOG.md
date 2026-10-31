@@ -2,6 +2,12 @@
 
 All notable changes to this project. Dates are in UTC.
 
+## [Unreleased]
+
+- Meets the plugin directory's checks: the Haiku call lives in the hooks module's main file, and a ticket's sub-agent
+  is linked at its first turn's start or from the Agent call's answer, with no `agent.spawn` hook.
+- The README says what each hook does and changes, and what the mod sends where.
+
 ## [0.1.0] - 2026-11-01
 
 The first release.

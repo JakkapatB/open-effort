@@ -16,7 +16,7 @@ import {
   isSizeAtMost, isTierAtMost, largerSize, ticketLinesOf, tierOf,
 } from './policy'
 import type { FlowModel } from './policy'
-import { SCORE_GRACE_MS, isGoOn, isUnsure, scoreRequest } from './score'
+import { SCORE_GRACE_MS, SCORE_SYSTEM, SCORE_TIMEOUT_MS, isGoOn, isUnsure, scorePrompt, scoredFrom } from './score'
 import type { Scored } from './score'
 import { clockTime, languageOf, modelName, wordsFor } from './words'
 import type { Why } from './words'
@@ -77,7 +77,7 @@ function withAgent(all: Record<string, SubAgent>, id: string, agent: SubAgent): 
 
 /**
  * A sub-agent as the mod knows it; the first time, its type is looked up to know whether it is one the mod climbs. A
- * ticket's sub-agent is known from its start (the `agent.spawn` hook).
+ * ticket's sub-agent is known from the start of its first turn, or from the Agent call's answer.
  */
 async function subAgent($: EngineInterface, id: string): Promise<SubAgent> {
   const known = (await read($, agents))[id]
@@ -95,6 +95,28 @@ async function testWritten($: EngineInterface, agentId: string | undefined, path
   }
   const agent = await subAgent($, agentId)
   await update($, agents, all => withAgent(all, agentId, { ...agent, isRed: true }))
+}
+
+/**
+ * One Haiku call with the whole request, at low effort: it decides, it does not reason at length. With what Claude
+ * said last (`said`), Haiku also judges whether the message goes on with the work under way. No score when it times
+ * out, fails or answers none.
+ */
+async function scoreRequest($: EngineInterface, text: string, said?: string): Promise<Scored> {
+  const res = await $.model.complete({ model: 'haiku', system: SCORE_SYSTEM, prompt: scorePrompt(text, said), maxTokens: 64, effort: 'low', timeoutMs: SCORE_TIMEOUT_MS })
+  return scoredFrom(res)
+}
+
+/**
+ * The sub-agent `id` takes up the ticket handed by the Agent call `toolUseId`: from then on it runs on the ticket's
+ * setting and climbs from it, whatever its type. Nothing when that hand-off is gone or the agent has a ticket.
+ */
+async function takeUpTicket($: EngineInterface, id: string, toolUseId: string): Promise<void> {
+  const ticket = (await read($, handed))[toolUseId]
+  if (!ticket || (await read($, agents))[id]?.ticket) return
+  await dropHanded($, toolUseId)
+  const agent: SubAgent = { effort: ticket.effort, climbed: null, fails: 0, isClimbable: true, ticket: ticket.ticket, ...(ticket.tier ? { tier: ticket.tier } : {}) }
+  await update($, agents, all => withAgent(all, id, agent))
 }
 
 /** Drops a hand-off once its agent started, or the call started none. */
@@ -682,8 +704,11 @@ export const register: Register = on => {
         await update($, handed, all => ({ ...all, [toolUseId]: { ticket: number, ...setting } }))
         const model = setting.tier ?? taskTier
         const ran = await next({ ...e, effort: setting.effort, ...(model ? { model } : {}) })
-        // A call refused, or failed, leaves nothing behind; one that started its agent was taken up as it started.
+        // A call refused, or failed, leaves nothing behind. One that started its agent answers with the agent's id:
+        // the agent takes up its ticket now, if its first turn's start did not already.
+        const started = (ran.result as { agentId?: unknown } | undefined)?.agentId
         if (ran.deny !== undefined || ran.isError === true) await dropHanded($, toolUseId)
+        else if (typeof started === 'string') await takeUpTicket($, started, toolUseId)
         return ran
       }
     }
@@ -701,21 +726,6 @@ export const register: Register = on => {
     const ran = await next(e)
     if (ran.deny === undefined && ran.isError !== true) await testWritten($, e.agentId, e.file_path)
     return ran
-  }).catch(($, e, next) => next(e))
-
-  // A sub-agent started for a ticket handed to it: from its first request it runs on the ticket's setting and climbs
-  // from it, whatever its type. The spawn carries the Agent call's tool_use_id and answers the agent's own id.
-  on('agent.spawn', async ($, e, next) => {
-    const res = await next(e)
-    const ticket = (await read($, handed))[e.tool_use_id]
-    if (!ticket) return res
-    await dropHanded($, e.tool_use_id)
-    const id = res.agentId
-    if (id) {
-      const agent: SubAgent = { effort: ticket.effort, climbed: null, fails: 0, isClimbable: true, ticket: ticket.ticket, ...(ticket.tier ? { tier: ticket.tier } : {}) }
-      await update($, agents, all => withAgent(all, id, agent))
-    }
-    return res
   }).catch(($, e, next) => next(e))
 
   // A check the main session ran: three failures in a row climb the task, a pass after a climb settles it, and a
@@ -767,6 +777,11 @@ export const register: Register = on => {
       await update($, running, ids => (ids.includes(id) ? ids : [...ids, id]))
       const now = await $.clock.now()
       await update($, seen, before => ({ ...before, [`agent:${id}`]: before[`agent:${id}`] ?? now }))
+      // A sub-agent's first turn starts with the Agent call's prompt: one naming a ticket handed out takes it up.
+      const path = ticketIn(e.text)
+      const number = path ? ticketOf(path) : null
+      const handOff = number ? Object.entries(await read($, handed)).find(([, h]) => h.ticket === number) : undefined
+      if (handOff) await takeUpTicket($, id, handOff[0])
     }
     return res
   }).catch(($, e, next) => next(e))

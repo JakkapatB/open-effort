@@ -185,19 +185,16 @@ export function engine(on: On, options: EngineOptions = {}) {
   // Bash runs as told: `bash.passes` decides whether the next command exits 0.
   const bash = { passes: true }
   const calls: Record<string, unknown>[] = []
-  // An agent starts through agent.spawn, as the Agent tool starts one: its id is the one the list gives its
-  // description, else a fresh one.
-  const spawned: Record<string, unknown>[] = []
-  on('agent.spawn', (_, e) => {
-    spawned.push(e as Record<string, unknown>)
-    const listed = AGENTS.find(a => a.description === e.description)
-    return { model: e.model ?? e.parentModel, agentId: listed?.id ?? `agent-${spawned.length}` }
-  })
   on('tool.call', (_, e) => {
     calls.push(e as Record<string, unknown>)
+    // The Agent tool answers with the id of the agent it started: the one the list gives its description.
+    if (e.tool === 'Agent') {
+      const listed = AGENTS.find(a => a.description === (e as { description?: string }).description)
+      return { result: listed ? { agentId: listed.id } : {}, text: 'started' }
+    }
     return bash.passes ? { result: {}, text: 'ok' } : { result: {}, text: 'Exit code 1', isError: true }
   })
-  return { sent, asked, submitted, bash, opened, written, clock, calls, spawned, viewed, where, store, conversation }
+  return { sent, asked, submitted, bash, opened, written, clock, calls, viewed, where, store, conversation }
 }
 
 export const DAY_MS = 24 * 60 * 60 * 1000
@@ -289,19 +286,4 @@ export async function bandText($: Engine, surface: (typeof SURFACES)[number] = '
   walk(await ui.drawn())
   await ui.unmount()
   return text?.text ?? alts.find(alt => alt.includes('open-effort'))
-}
-
-/** The Agent tool starting the agent of the call `toolUseId`, as the engine raises it; its id comes back. */
-export async function spawn($: Engine, toolUseId: string, description: string, prompt: string) {
-  const res = await $.agent.spawn({
-    tool_use_id: toolUseId,
-    prompt,
-    description,
-    subagentType: 'general-purpose',
-    provider: { plugin: 'engine', tier: 'core' },
-    parentModel: 'claude-opus-5-5',
-    background: true,
-    fork: false,
-  })
-  return res.agentId
 }
