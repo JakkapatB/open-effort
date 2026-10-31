@@ -121,7 +121,11 @@ The band above the prompt draws the task as a small flow: what Haiku read (or th
 
 - Everything the mod keeps is in Claude Code's plugin store on your machine: the switches, the language, the theme, and per project its history.
 - The history never holds what you typed: only times, efforts, readings, stages, counts and model names.
-- The mod makes no network call of its own. Its only model call is the Haiku reading of a new request (with the end of Claude's last message when a task is under way), sent through Claude Code like any other request.
+- The mod makes no network call of its own. Its only model call is a Haiku reading, sent through Claude Code like any other request, of:
+  - a new request you type, with the end of Claude's last message when a task is under way;
+  - a Main Flow ticket that names no `Model:` or `Effort:` line, when Claude reads it or hands it to a sub-agent.
+- The only files it reads are those tickets (`<feature>/issues/NN-*.md`), in the implement stage. It writes no files.
+- It adds notes to the conversation for Claude (asking about the Main Flow or a model, writing ticket lines, stopping at the ladder's end), and registers three tools Claude can call: `stage`, `model` and `report`.
 
 ## Limits
 
