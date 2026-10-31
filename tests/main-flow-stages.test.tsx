@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
-import { MATT_SKILLS, bandText, engine, fail, finish, paneText, pressPane, request, start, type } from './engine'
+import { BAND, MATT_SKILLS, bandText, engine, fail, finish, paneText, pressPane, request, start, type } from './engine'
 
 const LARGE = 'clarity=unclear hard=no risky=no size=large'
 const SKILLS = '/Users/me/.claude/plugins/cache/mattpocock/mattpocock-skills/1.3.2/skills'
@@ -80,15 +80,50 @@ test('a stage command the person types sets the stage', async ($, on) => {
   expect(await effortNow($, sent)).toBe('medium')
 })
 
-test('a stage skill Claude reads or calls outside an invited flow changes nothing', async ($, on) => {
+test('on direct work, a stage skill Claude reads or calls raises the effort to its stage’s, outside the flow', async ($, on) => {
   const { sent } = await flow(on, { haiku: 'clarity=clear hard=no risky=no size=small' })
   await start($)
   await type($, 'review my last change')
+  expect(await effortNow($, sent)).toBe('low')
   await $.tool.call({ tool: 'Read', file_path: `${SKILLS}/engineering/code-review/SKILL.md` })
   await $.tool.call({ tool: 'Skill', skill: 'mattpocock-skills:tdd' })
   await stage($, 'review')
 
-  expect(await effortNow($, sent)).toBe('low')
+  // code-review's xhigh holds: tdd's high is below it, and the stage tool starts no flow uninvited.
+  expect(await effortNow($, sent, 1)).toBe('xhigh')
+  expect(await bandText($)).not.toContain('Main Flow')
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const drawn = JSON.stringify(await ui.drawn())
+  await ui.unmount()
+  expect(drawn).toContain("Matt's skill · direct")
+})
+
+test('on direct work on a Sonnet session, a stage skill moves the task to the Main Flow’s model', async ($, on) => {
+  const { sent } = await flow(on, { haiku: 'clarity=clear hard=no risky=no size=small', model: 'claude-sonnet-5-5' })
+  await start($)
+  await request($, 'high', 0, 'claude-sonnet-5-5')
+  await type($, 'fix the coupon rounding')
+  await $.tool.call({ tool: 'Skill', skill: 'mattpocock-skills:tdd' })
+  await request($, 'high', 1, 'claude-sonnet-5-5')
+  await type($, 'what does this regex match?')
+  await request($, 'high', 2, 'claude-sonnet-5-5')
+
+  expect(sent.map(e => [e.model, e.effort])).toEqual([
+    ['claude-sonnet-5-5', 'high'],
+    ['claude-opus-5-5', 'high'],
+    ['claude-sonnet-5-5', 'low'],
+  ])
+})
+
+test('with the Main Flow’s model set to the session’s, a stage skill on direct work keeps the model', async ($, on) => {
+  const { sent } = await flow(on, { haiku: 'clarity=clear hard=no risky=no size=small', model: 'claude-sonnet-5-5', store: { flowModel: 'session' } })
+  await start($)
+  await request($, 'high', 0, 'claude-sonnet-5-5')
+  await type($, 'fix the coupon rounding')
+  await $.tool.call({ tool: 'Skill', skill: 'mattpocock-skills:code-review' })
+  await request($, 'high', 1, 'claude-sonnet-5-5')
+
+  expect(sent.at(-1)).toMatchObject({ model: 'claude-sonnet-5-5', effort: 'xhigh' })
 })
 
 test('when the person chose to work directly, a stage skill Claude calls or reads keeps the task out of the flow', async ($, on) => {

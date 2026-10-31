@@ -12,7 +12,7 @@ import {
 } from './main-flow'
 import {
   EFFORTS, FABLE_MODEL, FAILS_TO_STALL, FLOW_MODELS, FRESH_TASK, TIER_MODEL, afterAgentCheck, afterCheck, afterTicketAgentCheck, enteredStage, enteredTicket,
-  fitEffort, flowModelFor, isBuiltInAgent, isEffort, isFable, isFlowModel, modelUp, rungOf, startingEffort, subAgentStart, supportedEfforts, taskModel, ticketIn, ticketOf,
+  fitEffort, flowModelFor, isBuiltInAgent, isEffort, isFable, isFlowModel, modelUp, rungOf, startingEffort, subAgentStart, supportedEfforts, taskModel, usedStageSkill, ticketIn, ticketOf,
   ticketLinesOf, tierOf,
 } from './policy'
 import type { FlowModel } from './policy'
@@ -191,9 +191,21 @@ async function ticketSetting($: EngineInterface, path: string): Promise<TicketSe
   return { ...(tier ? { tier } : {}), effort: startingEffort(score) }
 }
 
-/** Claude showed it is starting a stage (calling its skill, reading its SKILL.md): the main session's only. */
+/**
+ * Claude showed it is starting a stage (calling its skill, reading its SKILL.md): the main session's only. In the
+ * Main Flow the task moves to that stage. On work done directly the task stays out of the flow, but keeps the same
+ * care: at least the stage's effort, on the model picked for the Main Flow (never a step down).
+ */
 async function stageSign($: EngineInterface, agentId: string | undefined, stage: Stage | null): Promise<void> {
-  if (agentId === undefined && stage) await moveToStage($, stage, 'sign')
+  if (agentId !== undefined || !stage || !(await read($, isOn))) return
+  const t = await read($, task)
+  if (t.stage !== null) {
+    await moveToStage($, stage, 'sign')
+    return
+  }
+  const moveTo = flowModelFor(await read($, flowModel), taskModel(t, await read($, sessionModel)))
+  const own = await read($, sessionEffort)
+  await setTask($, current => usedStageSkill(current, stage, own, moveTo))
 }
 
 /** The Main Flow ended: the next request starts a new task. */
@@ -695,7 +707,9 @@ export const register: Register = on => {
     const steps: Step[] = [
       source === 'stage'
         ? { title: words.steps.stage, value: `${t.stage ?? ''}${t.ticket ? ` · ${words.steps.ticket(t.ticket)}` : ''}`, state: 'done', rank: 1 }
-        : { title: words.steps.read, value: source === 'score' ? short(reason) : words.steps.noScore, state: source === 'score' ? 'done' : 'idle', rank: 1 },
+        : t.skill
+          ? { title: words.steps.skill, value: `${t.skill}${t.score ? ` · ${short(reason)}` : ''}`, state: 'done', rank: 1 }
+          : { title: words.steps.read, value: source === 'score' ? short(reason) : words.steps.noScore, state: source === 'score' ? 'done' : 'idle', rank: 1 },
       {
         title: `${words.steps.effort} · ${effortModel}`,
         ...(t.climbed && t.effort ? { aside: words.steps.from(t.effort) } : {}),

@@ -38,6 +38,8 @@ export type StepWords = {
   /** The effort's value before the session's own is seen. */
   own: string
   stage: string
+  /** The first step on work done directly once Claude used a stage's skill on it. */
+  skill: string
   atEnd: string
   climbed: string
   failed: string
@@ -175,6 +177,7 @@ const EN: Words = {
     noScore: 'no score',
     own: 'session',
     stage: 'Main Flow',
+    skill: "Matt's skill · direct",
     atEnd: 'asking you',
     climbed: 'Climbed',
     failed: 'Check failed',
@@ -232,6 +235,7 @@ const TH: Words = {
     noScore: 'ไม่มีคะแนน',
     own: 'session',
     stage: 'Main Flow',
+    skill: 'skill ของ Matt · ทำตรงๆ',
     atEnd: 'จะถามคุณ',
     climbed: 'ไต่ขึ้น',
     failed: 'check ไม่ผ่าน',

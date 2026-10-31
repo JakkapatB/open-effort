@@ -54,6 +54,11 @@ export type Task = {
   modelOffer: ModelTier | null
   /** The ticket Claude works in the implement stage, by its number; null when none. */
   ticket: string | null
+  /**
+   * The stage whose skill Claude used on work done directly, outside the Main Flow (code-review, tdd): the task keeps
+   * at least that stage's effort, on the Main Flow's model; null when none.
+   */
+  skill: Stage | null
 }
 
 /**

@@ -36,7 +36,7 @@ export type Loop = { label: string; tone: 'alert' | 'brand' | 'violet'; isNew: b
  */
 export function bandKeys(task: Task): string[] {
   return [
-    `head:${task.stage ?? 'read'}`,
+    `head:${task.stage ?? (task.skill ? `skill:${task.skill}` : 'read')}`,
     `effort:${task.stage ?? ''}:${task.effort ?? ''}`,
     ...(task.isAtLadderEnd ? ['end'] : []),
     ...(task.climbed ? [`climb:${task.climbed.effort}:${task.climbed.isFable}`] : []),

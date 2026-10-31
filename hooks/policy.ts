@@ -97,6 +97,7 @@ export const NEW_TASK: Omit<Task, 'score' | 'effort'> = {
   model: null,
   modelOffer: null,
   ticket: null,
+  skill: null,
 }
 
 /** A task with no score yet: the session's own effort until something sets one. */
@@ -125,6 +126,22 @@ export function enteredStage(task: Task, stage: Stage): Task {
     fails: 0,
     isAtLadderEnd: false,
     ticket: null,
+    skill: null,
+  }
+}
+
+/**
+ * Work done directly, outside the Main Flow, on which Claude used a stage's skill (code-review, tdd): the task keeps at
+ * least that stage's effort from then on, a climb above it left in place, and moves to `model` when one is given.
+ */
+export function usedStageSkill(task: Task, stage: Stage, own: Effort | null, model: string | null): Task {
+  const floor = STAGE_EFFORT[stage]
+  const effort = atLeast(task.effort ?? own ?? floor, floor)
+  return {
+    ...task,
+    effort,
+    skill: stage,
+    ...(model ? { model, isOnFable: task.isOnFable || isFable(model) } : {}),
   }
 }
 
