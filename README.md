@@ -89,6 +89,27 @@ The mod never picks `max` by itself.
 
 A general-purpose sub-agent's effort follows the stage it runs in: the code-review reviewers run at `xhigh` because the review stage does. Plan and general-purpose sub-agents run on the task's model, so in the Main Flow they use its model (Opus 5.5 by default) even on a Sonnet session. Explore always runs on Haiku, and a ticket's sub-agent runs on the ticket's model.
 
+## Which model and effort, when
+
+| Model | When it runs |
+|---|---|
+| **Your session's model** (the one you picked with `/model`) | Everything, unless a row below says otherwise |
+| **A stronger model Haiku suggests** | The whole task, only if you say yes when Claude asks at the start |
+| **Opus 5.5** | The whole Main Flow (change it in the pane). A session already on a stronger model keeps it |
+| **Fable 5.1** | After the effort goes past `xhigh` and checks still fail; in the Main Flow if you pick it; for a ticket that says `Model: fable` |
+| **Haiku** | Reading each new request and each ticket without `Model:` and `Effort:` lines; Explore sub-agents; tickets that say `Model: haiku` |
+| **A ticket's `Model:`** | The sub-agent that works that ticket. When Claude works a ticket itself, it keeps the task's model |
+
+| Effort | When it is used |
+|---|---|
+| `low` | You know what to do and how; Explore sub-agents; Haiku's own reading |
+| `medium` | A known goal whose way needs thought; the lowest for risky work or when Haiku is unsure; the tickets and retro stages |
+| `high` | The plan is not clear yet; the grill, spec and implement stages; Plan sub-agents; the first step on Fable 5.1 |
+| `xhigh` | Unusually hard work; the review stage; the highest a sub-agent climbs to |
+| `max` | Only on Fable 5.1, after `high` and `xhigh` there still fail. Never picked at the start |
+
+Three failing checks in a row raise the effort one level; a passing check brings it back to where the task started. A ticket's `Effort:` overrides the stage's effort for that ticket.
+
 ## The pane
 
 Open it with `/open-effort` or the band's **≡**.
