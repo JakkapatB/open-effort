@@ -112,7 +112,7 @@ test('a climb changes the effort in place, its loop fading away, and the flow is
   expect(later.split('class=\\"card ').length - 1).toBe(2)
 })
 
-test('sub-agents at work branch off the flow, each a card that opens its transcript', async ($, on) => {
+test('sub-agents at work branch off the flow; where the surface can open one, each is a button to its transcript', async ($, on) => {
   const { viewed } = engine(on, { haiku: 'clarity=goal hard=no risky=no size=small' })
   await start($)
   await $.prompt.submit({ text: 'add a coupon field', wait: false, origin: { kind: 'composer' } })
@@ -124,7 +124,7 @@ test('sub-agents at work branch off the flow, each a card that opens its transcr
 
   await $.turn.start({ text: 'look around', turnId: 'ta', agentId: 'a1' })
   await $.turn.start({ text: 'search', turnId: 'tb', agentId: 'a2' })
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const ui = await $.ui.mount({ ...BAND, surface: 'vscode' })
   const drawn = JSON.stringify(await ui.drawn())
   expect(drawn).toContain('Effort · Opus 5.5')
   expect(drawn).toContain('general-purpose')
@@ -137,7 +137,7 @@ test('sub-agents at work branch off the flow, each a card that opens its transcr
   expect(viewed).toEqual(['a2'])
 
   await $.turn.complete({ turnId: 'ta', agentId: 'a1', answer: 'done', durationMs: 10, isAborted: false, reason: 'answer' })
-  const after = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const after = await $.ui.mount({ ...BAND, surface: 'vscode' })
   const left = JSON.stringify(await after.drawn())
   await after.unmount()
   expect(left).not.toContain('agent-a1')
@@ -178,19 +178,34 @@ test('/open-effort off switches this project off, leaving the machine’s defaul
   expect(await bandText($)).toBeDefined()
 })
 
-test('where the surface draws no main view, a press says so once and the agents become plain labels', async ($, on) => {
-  const { viewed } = engine(on, { haiku: 'clarity=goal hard=no risky=no size=small', viewDeny: 'no main view here' })
+test('in the desktop app, which cannot open an agent from the band, the agents are labels from the start', async ($, on) => {
+  engine(on, { haiku: 'clarity=goal hard=no risky=no size=small' })
   await start($)
   await $.prompt.submit({ text: 'add a coupon field', wait: false, origin: { kind: 'composer' } })
   await request($, 'high')
   await $.turn.start({ text: 'review', turnId: 'ta', agentId: 'a1' })
 
   const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const drawn = JSON.stringify(await ui.drawn())
+  await ui.unmount()
+  expect(drawn).toContain('general-purpose')
+  expect(drawn.split('"type":"Button"').length - 1).toBe(1)
+  expect(drawn).toContain('"type":"Box","props":{"key":"agent-a1"')
+})
+
+test('where a press finds the surface draws no main view, it says so once and the agents become plain labels', async ($, on) => {
+  const { viewed } = engine(on, { haiku: 'clarity=goal hard=no risky=no size=small', viewDeny: 'no main view here' })
+  await start($)
+  await $.prompt.submit({ text: 'add a coupon field', wait: false, origin: { kind: 'composer' } })
+  await request($, 'high')
+  await $.turn.start({ text: 'review', turnId: 'ta', agentId: 'a1' })
+
+  const ui = await $.ui.mount({ ...BAND, surface: 'vscode' })
   await ui.press({ key: 'agent-a1' })
   await ui.unmount()
   expect(viewed).toEqual(['a1'])
 
-  const after = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const after = await $.ui.mount({ ...BAND, surface: 'vscode' })
   const drawn = JSON.stringify(await after.drawn())
   await after.unmount()
   expect(drawn).toContain('general-purpose')

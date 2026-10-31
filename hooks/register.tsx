@@ -49,7 +49,8 @@ const handed = atom({ plugin: 'open-effort', key: 'handed' } as const, {} as Rec
 const scoring = atom({ plugin: 'open-effort', key: 'scoring' } as const, 0)
 // Whether a prompt's score is still on its way: its requests go out at the session's own effort meanwhile.
 const isScoring = atom({ plugin: 'open-effort', key: 'isScoring' } as const, false)
-// Whether the surface can put an agent's transcript in view; false once it said it draws no main view.
+// Whether the surface can put an agent's transcript in view; false once it said it draws no main view. The desktop
+// app never can: its band never offers it.
 const canView = atom({ plugin: 'open-effort', key: 'canView' } as const, true)
 
 /** Sub-agents kept: the latest ones, enough for any session's running agents. */
@@ -772,7 +773,9 @@ export const register: Register = on => {
         await update($, seenLast, last => ({ ...last, view: reason }))
       }
     }
-    const isPressable = await read($, canView)
+    // The desktop app has no main view to put an agent in: its agents are labels from the start. Elsewhere they are
+    // buttons until a press finds the surface cannot open one.
+    const isPressable = e.surface !== 'desktop' && (await read($, canView))
     return (
       <Box flexDirection="column" gap={1}>
         {stages && <Svg source={stages.source} width={stages.width} height={stages.height} alt={`Main Flow: ${t.stage}`} />}

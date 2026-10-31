@@ -164,7 +164,7 @@ effort ของ sub-agent แบบ general-purpose จะเท่ากับ
 - `Model:` และ `Effort:` ของ ticket ใช้ได้กับ ticket ที่เป็นไฟล์ในเครื่อง (`<feature>/issues/NN-*.md`) เท่านั้น ถ้าเก็บ ticket ไว้ใน GitHub หรือ Linear จะไม่มีผล
 - ในขั้นตอน implement ทุกครั้งที่ Claude อ่านไฟล์ ticket mod จะถือว่า Claude กำลังจะทำ ticket นั้น และเปลี่ยน effort ตาม ticket
 - ข้อความที่ mod ส่งให้ Claude เป็นแค่คำแนะนำ Claude อาจไม่ทำตามทุกครั้ง
-- แอป desktop เปิด sub-agent จากแถบไม่ได้ พอลองกดครั้งแรกแล้ว แถบจะแสดงรายชื่อ sub-agent เป็นข้อความธรรมดาแทนปุ่ม
+- แอป desktop เปิด sub-agent จากแถบไม่ได้ แถบจึงแสดงรายชื่อ sub-agent เป็นข้อความธรรมดา ไม่ใช่ปุ่ม
 
 </details>
 

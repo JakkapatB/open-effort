@@ -162,7 +162,7 @@ Test, typecheck, build and lint runs (JavaScript/TypeScript, Python, Go, Rust, N
 - Ticket lines work with ticket files on disk (`<feature>/issues/NN-*.md`). Tickets kept in GitHub or Linear get none of this.
 - In the implement stage, each ticket file Claude reads sets the effort Claude works at: the mod takes it as the ticket Claude works next.
 - The notes to Claude are instructions, not enforcement.
-- The desktop app cannot open a sub-agent from the band: after the first try, the band lists them as labels.
+- The desktop app cannot open a sub-agent from the band, so there the band lists them as labels, not buttons.
 
 </details>
 
