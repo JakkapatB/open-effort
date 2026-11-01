@@ -55,7 +55,7 @@ claude plugin marketplace add JakkapatB/open-effort && claude plugin install ope
 /plugin install open-effort --marketplace JakkapatB/open-effort
 ```
 
-**Or in the desktop app:** **Settings** → **Customize** → **Plugins** → **+ Add** → **Add marketplace** → `JakkapatB/open-effort` → **Sync**, then install **open-effort**.
+**Or in the desktop app:** **Settings** → **Customize** → **Plugins** → **+ Add** → **Add marketplace** → `JakkapatB/open-effort` → **Sync**. Then, in the **Discover** tab, find **Open effort** and choose **Add to this computer** ▾ → **Install for me**, so it works in every project. In the desktop app, typing `/plugin install …` only searches Anthropic's plugin directory, where open-effort is not listed.
 
 Nothing to set up: start a new session and the band appears above the prompt.
 
