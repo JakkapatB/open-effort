@@ -20,14 +20,22 @@ export type Why =
 
 export type Words = {
   commandDescription: string
-  /** The band: the Main Flow stage if in it, the effort in use (null: the session's own, not seen yet), on Fable 5.1 or not, and why. */
-  band: (effort: Effort | null, isOnFable: boolean, why: Why, stage: Stage | null) => string
+  /**
+   * The band: the flow (by `flow`, its name) and stage if in one, the effort in use (null: the session's own, not seen
+   * yet), on Fable 5.1 or not, and why.
+   */
+  band: (effort: Effort | null, isOnFable: boolean, why: Why, stage: Stage | null, flow: string) => string
   /** Why the effort is what it is, alone: the band's reason. */
   reason: (why: Why) => string
   /** The band's steps: what the mod did and does, and the values it shows. */
   steps: StepWords
   status: (isOn: boolean) => string
   onlyPerson: string
+  /** Only the person can ask for their own flow. */
+  onlyPersonFlow: string
+  /** Said as Claude starts on the project's own flow, and when its prompt could not go in. */
+  flowWriting: string
+  flowFailed: string
   pane: PaneWords
 }
 
@@ -38,15 +46,16 @@ export type StepWords = {
   /** The effort's value before the session's own is seen. */
   own: string
   stage: string
-  /** The first step on work done directly once Claude used a stage's skill on it. */
+  /** The first step on work done directly once Claude used a stage's skill on it: Matt's, or a project's own flow's. */
   skill: string
+  flowSkill: string
   atEnd: string
   climbed: string
   failed: string
   stopped: string
   /** The effort's title after a climb: where it climbed from. */
   from: (effort: Effort) => string
-  /** The ticket Claude works in the implement stage. */
+  /** The ticket Claude works in the stage that works tickets. */
   ticket: (number: string) => string
   agents: string
   agentsAt: (n: number) => string
@@ -64,6 +73,13 @@ export type PaneWords = {
   on: string
   off: string
   mainFlow: string
+  flow: string
+  /** Which flow the project uses: Matt Pocock's, built in, or its own from `file`. */
+  flowSource: (name: string, file: string | null) => string
+  /** The project's flow file cannot be used, and why. */
+  flowProblem: (problem: string) => string
+  /** How to have Claude write the project's own flow. */
+  flowHint: string
   missing: (skills: readonly string[]) => string
   install: string
   language: string
@@ -71,7 +87,7 @@ export type PaneWords = {
   theme: string
   flowModel: string
   flowModels: Readonly<Record<FlowModel, string>>
-  /** What each Main Flow model costs: its limits, said where it is picked. */
+  /** What each flow model costs: its limits, said where it is picked. */
   flowModelLimits: Readonly<Record<FlowModel, string>>
   themes: Readonly<Record<ThemeId, string>>
   history: (turns: number) => string
@@ -108,10 +124,10 @@ function reasonOf(p: Phrases) {
 }
 
 function bandOf(p: Phrases) {
-  return (effort: Effort | null, isOnFable: boolean, why: Why, stage: Stage | null): string => {
+  return (effort: Effort | null, isOnFable: boolean, why: Why, stage: Stage | null, flow: string): string => {
     if (!effort) return `open-effort · ${p.noEffort}`
     const reason = reasonOf(p)(why)
-    return `open-effort · ${stage ? `Main Flow: ${stage} · ` : ''}${isOnFable ? 'Fable 5.1 · ' : ''}effort ${effort} · ${reason}`
+    return `open-effort · ${stage ? `${flow}: ${stage} · ` : ''}${isOnFable ? 'Fable 5.1 · ' : ''}effort ${effort} · ${reason}`
   }
 }
 
@@ -168,7 +184,7 @@ const TH_PHRASES: Phrases = {
 }
 
 const EN: Words = {
-  commandDescription: 'open-effort: open its pane; "on" or "off" switches it for this project',
+  commandDescription: 'open-effort: open its pane; "on" or "off" switches it for this project; "flow" has Claude write your own flow',
   band: bandOf(EN_PHRASES),
   reason: reasonOf(EN_PHRASES),
   steps: {
@@ -178,6 +194,7 @@ const EN: Words = {
     own: 'session',
     stage: 'Main Flow',
     skill: "Matt's skill · direct",
+    flowSkill: 'Flow skill · direct',
     atEnd: 'asking you',
     climbed: 'Climbed',
     failed: 'Check failed',
@@ -191,6 +208,9 @@ const EN: Words = {
   },
   status: isOn => (isOn ? 'on for this project.' : 'off for this project: it changes nothing here until you turn it on with /open-effort on.'),
   onlyPerson: 'only the person can switch it, by typing /open-effort on or off.',
+  onlyPersonFlow: 'only the person can ask for their own flow, by typing /open-effort flow.',
+  flowWriting: 'Claude will ask you about your flow, then write .claude/open-effort.json once you agree.',
+  flowFailed: 'open-effort could not hand Claude the flow request. Ask Claude yourself to write .claude/open-effort.json, or type /open-effort flow again.',
   pane: {
     switches: 'Switch',
     useHere: name => `Use in this project · ${name}`,
@@ -199,22 +219,26 @@ const EN: Words = {
     on: 'On',
     off: 'Off',
     mainFlow: 'Main Flow',
+    flow: 'Flow',
+    flowSource: (name, file) => (file ? `${name} · from ${file}` : "Matt Pocock's Main Flow · built in"),
+    flowProblem: problem => `The flow file can't be used: ${problem}. The flow is off until it is fixed.`,
+    flowHint: 'Type /open-effort flow to have Claude write your own.',
     missing: skills => `Missing skills: ${skills.join(', ')}`,
     install: 'Install them from a terminal, then reload plugins:',
     language: 'Language',
     theme: 'Theme',
-    flowModel: 'Model for the Main Flow',
+    flowModel: 'Model for the flow',
     flowModels: { frontier: 'Frontier · Opus 5.5', fable: 'Fable 5.1', session: "Session's model" },
     flowModelLimits: {
       frontier: 'Every stage runs on Opus 5.5. A session on a smaller model switches once as the flow starts: the prompt cache starts afresh, and it costs more than Sonnet. A session on Fable 5.1 stays on it.',
       fable: 'Every stage runs on Fable 5.1, the most capable model: the most expensive per token, and its turns run longer. The prompt cache starts afresh as the flow starts.',
-      session: "The flow stays on the session's model: no switch, the cache holds. On a smaller model, grill, spec and review may come out weaker.",
+      session: "The flow stays on the session's model: no switch, the cache holds. On a smaller model, planning and review stages may come out weaker.",
     },
     themes: { claude: 'Claude', lime: 'Lime', ocean: 'Ocean', rose: 'Rose' },
     auto: 'Auto',
     history: turns => `History · ${turns} turns`,
     noHistory: 'No turns yet.',
-    entry: entryLine(EN_PHRASES, { read: 'Haiku:', none: 'no score, the session\'s own', stage: 'Main Flow:' }, e => `start ${e}`),
+    entry: entryLine(EN_PHRASES, { read: 'Haiku:', none: 'no score, the session\'s own', stage: 'Flow:' }, e => `start ${e}`),
     entryTitle: entryTitleOf(n => `climbed ${n}`),
     chart: { climbed: 'climbed', changed: 'changed mid-turn', models: 'Model · effort the turns started at', fable: 'Fable 5.1', started: 'Where turns start', turns: 'started at' },
     summary: es => {
@@ -226,7 +250,7 @@ const EN: Words = {
 }
 
 const TH: Words = {
-  commandDescription: 'open-effort: เปิด pane พิมพ์ "on" หรือ "off" เพื่อเปิดหรือปิดในโปรเจกต์นี้',
+  commandDescription: 'open-effort: เปิด pane พิมพ์ "on" หรือ "off" เพื่อเปิดหรือปิดในโปรเจกต์นี้ พิมพ์ "flow" ให้ Claude ช่วยเขียน flow ของคุณเอง',
   band: bandOf(TH_PHRASES),
   reason: reasonOf(TH_PHRASES),
   steps: {
@@ -236,6 +260,7 @@ const TH: Words = {
     own: 'session',
     stage: 'Main Flow',
     skill: 'skill ของ Matt · ทำตรงๆ',
+    flowSkill: 'skill ของ flow · ทำตรงๆ',
     atEnd: 'จะถามคุณ',
     climbed: 'ไต่ขึ้น',
     failed: 'check ไม่ผ่าน',
@@ -249,6 +274,9 @@ const TH: Words = {
   },
   status: isOn => (isOn ? 'เปิดอยู่ในโปรเจกต์นี้' : 'ปิดอยู่ในโปรเจกต์นี้: จะไม่เปลี่ยนอะไรจนกว่าคุณจะพิมพ์ /open-effort on'),
   onlyPerson: 'เปิดหรือปิดได้เฉพาะผู้ใช้ โดยพิมพ์ /open-effort on หรือ off',
+  onlyPersonFlow: 'ขอ flow ของตัวเองได้เฉพาะผู้ใช้ โดยพิมพ์ /open-effort flow',
+  flowWriting: 'Claude จะถามคุณเรื่อง flow แล้วเขียน .claude/open-effort.json เมื่อคุณตกลง',
+  flowFailed: 'open-effort ส่งคำขอเรื่อง flow ให้ Claude ไม่สำเร็จ ลองบอก Claude เองให้เขียน .claude/open-effort.json หรือพิมพ์ /open-effort flow อีกครั้ง',
   pane: {
     switches: 'สวิตช์',
     useHere: name => `ใช้ในโปรเจกต์นี้ · ${name}`,
@@ -257,22 +285,26 @@ const TH: Words = {
     on: 'เปิด',
     off: 'ปิด',
     mainFlow: 'Main Flow',
+    flow: 'Flow',
+    flowSource: (name, file) => (file ? `${name} · จาก ${file}` : 'Main Flow ของ Matt Pocock · มีมาให้'),
+    flowProblem: problem => `ใช้ไฟล์ flow ไม่ได้: ${problem} flow จะปิดอยู่จนกว่าจะแก้ไฟล์`,
+    flowHint: 'พิมพ์ /open-effort flow ให้ Claude ช่วยเขียน flow ของคุณเอง',
     missing: skills => `ยังไม่มี skill: ${skills.join(', ')}`,
     install: 'ติดตั้งจาก terminal แล้ว reload plugins:',
     language: 'ภาษา',
     theme: 'ธีมสี',
-    flowModel: 'โมเดลของ Main Flow',
+    flowModel: 'โมเดลของ flow',
     flowModels: { frontier: 'Frontier · Opus 5.5', fable: 'Fable 5.1', session: 'ตามโมเดลของ session' },
     flowModelLimits: {
       frontier: 'ทุก stage ใช้ Opus 5.5 ถ้า session ใช้โมเดลที่เล็กกว่า จะเปลี่ยนครั้งเดียวตอนเข้า flow: prompt cache เริ่มใหม่ และแพงกว่า Sonnet ถ้า session ใช้ Fable 5.1 อยู่แล้วจะใช้ต่อ',
       fable: 'ทุก stage ใช้ Fable 5.1 โมเดลที่เก่งที่สุด: แพงที่สุดต่อ token และแต่ละ turn ใช้เวลานานกว่า prompt cache เริ่มใหม่ตอนเข้า flow',
-      session: 'ใช้โมเดลของ session ตลอด flow: ไม่เปลี่ยนโมเดล cache ไม่เสีย แต่ถ้าเป็นโมเดลที่เล็กกว่า grill, spec และ review อาจออกมาด้อยกว่า',
+      session: 'ใช้โมเดลของ session ตลอด flow: ไม่เปลี่ยนโมเดล cache ไม่เสีย แต่ถ้าเป็นโมเดลที่เล็กกว่า stage วางแผนและ review อาจออกมาด้อยกว่า',
     },
     themes: { claude: 'Claude', lime: 'มะนาว', ocean: 'ฟ้า', rose: 'ชมพู' },
     auto: 'อัตโนมัติ',
     history: turns => `ประวัติ · ${turns} turn`,
     noHistory: 'ยังไม่มี turn',
-    entry: entryLine(TH_PHRASES, { read: 'Haiku:', none: 'ไม่มีคะแนน ใช้ของ session', stage: 'Main Flow:' }, e => `เริ่ม ${e}`),
+    entry: entryLine(TH_PHRASES, { read: 'Haiku:', none: 'ไม่มีคะแนน ใช้ของ session', stage: 'Flow:' }, e => `เริ่ม ${e}`),
     entryTitle: entryTitleOf(n => `ไต่ขึ้น ${n}`),
     chart: { climbed: 'ไต่ขึ้น', changed: 'เปลี่ยนกลาง turn', models: 'โมเดล · effort ที่ turn เริ่ม', fable: 'Fable 5.1', started: 'turn เริ่มที่ระดับไหน', turns: 'เริ่มที่' },
     summary: es => {

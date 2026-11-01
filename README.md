@@ -137,6 +137,31 @@ The mod never picks `max` by itself.
 - Each ticket can set its own `Model:` and `Effort:`. A sub-agent given a ticket uses the model and effort the ticket sets.
 - Needs [Matt Pocock's skills](https://github.com/mattpocock/skills). The pane says which are missing.
 
+#### Your own flow
+
+A project can use its own flow instead of Matt's. Put it in `.claude/open-effort.json` at the project's root, or type `/open-effort flow`: Claude asks you about your flow and writes the file once you agree.
+
+```json
+{
+  "name": "Team flow",
+  "stages": [
+    { "name": "plan",   "skills": ["my-plan"],          "effort": "high" },
+    { "name": "tasks",  "skills": ["my-tasks"],         "effort": "medium" },
+    { "name": "build",  "skills": ["my-build", "tdd"],  "effort": "high" },
+    { "name": "review", "skills": ["my-review"],        "effort": "xhigh" }
+  ],
+  "tickets": { "write": "tasks", "work": "build", "files": "docs/tasks/*.md" }
+}
+```
+
+- **One flow per project.** With no file, the project uses Matt Pocock's Main Flow. With one, its flow replaces Matt's. Commit the file and your team shares the flow.
+- **Stages.** 2 to 10, in order. A name is up to 16 lower-case letters, digits or dashes. Each stage lists the skills that run it, as Claude Code's skill list names them (`my-skill`, or `plugin:my-skill` for that plugin's alone), and the effort it starts at: `low`, `medium`, `high` or `xhigh`. A skill belongs to one stage only.
+- **Tickets** are optional: the stage that writes them, a later stage that works them, and a glob for their files, whose names start with their number (`01-login.md`). They then work as in the Main Flow: `Model:` and `Effort:` at the top of each.
+- **It runs as the Main Flow does.** Large work has Claude ask you first, or you type a stage's command. Claude goes through the stages in order, using each stage's skills. The flow's model is still picked in the pane, and its switch is the same.
+- **The file holds settings only**, no instructions for Claude.
+- **Changes count from the next new task.** A flow under way keeps the file it started with.
+- **A file with a problem**, or a stage with none of its skills installed, keeps the flow off, and the pane says what is wrong. A stage's skills are ways to run it: one installed is enough. Everything else works as before.
+
 #### Sub-agents in the flow
 
 <p align="center">
@@ -175,7 +200,7 @@ Open it with `/open-effort` or the band's **≡**.
 </p>
 
 - **On or off** for this project (`/open-effort on|off` does the same).
-- **Main Flow** on or off, and its model.
+- **Flow**: which flow the project uses (Matt's Main Flow or its own file), on or off, and its model.
 - **Language:** auto, ไทย or English.
 - **Theme:** Claude, Lime, Ocean or Rose.
 - **History:** the last 500 turns of this project.
@@ -206,8 +231,8 @@ Test, typecheck, build and lint runs (JavaScript/TypeScript, Python, Go, Rust, N
 - **What it sends, and where.** The mod makes no network calls of its own. It sends text to one place: Claude's Haiku model, through Claude Code's own model call (`$.model.complete`), on your account, like any other Claude Code request. It sends:
   - each new request you type, and the last 800 characters of Claude's last message when a task is under way, to read how hard the work is;
   - the text of a ticket file without `Model:` and `Effort:` lines, to read the same for the ticket.
-- **Notes to Claude.** It adds short notes for Claude to the conversation (`$.session.append`, and context on your prompt): to ask you about a stronger model or the Main Flow, how to name a ticket's model and effort, and when to stop and ask you. They go to Claude with the conversation, as your messages do.
-- It reads only ticket files (`<feature>/issues/NN-*.md`) in the implement stage, and writes no files.
+- **Notes to Claude.** It adds short notes for Claude to the conversation (`$.session.append`, and context on your prompt): to ask you about a stronger model or the flow, how to name a ticket's model and effort, and when to stop and ask you. They go to Claude with the conversation, as your messages do. `/open-effort flow` sends Claude one prompt of its own (`$.prompt.submit`) asking it to help you write the flow file; it names your installed skills and commands.
+- It reads two kinds of file: the project's flow file, `.claude/open-effort.json`, when there is one, and ticket files in the stage that works them (`<feature>/issues/NN-*.md` in the Main Flow, or where your flow's file says). It writes no files: `/open-effort flow` has Claude write the flow file once you agree, as Claude writes any file.
 - It registers three tools of its own, `stage`, `model` and `report`, and the `/open-effort` command.
 
 ### What each hook does
@@ -216,12 +241,12 @@ Test, typecheck, build and lint runs (JavaScript/TypeScript, Python, Go, Rust, N
 |---|---|---|
 | `turn.step` | Sets each model request's effort, and its model when the task moved to another one | The request's `effort` and `model` |
 | `tool.call` on `Agent` | Sets a sub-agent's model and effort by its type, or from a ticket handed to it | The call's `model` and `effort`, only when the call names neither |
-| `prompt.submit` | Has Haiku read a new request; adds the notes above when there is a question for you | Adds context to the prompt; the prompt's text is never changed |
+| `prompt.submit` | Reads the project's flow file for each new task; has Haiku read a new request; adds the notes above when there is a question for you | Adds context to the prompt; the prompt's text is never changed |
 | `tool.call` on `Bash` | Counts test, lint, build and typecheck runs as passing or failing checks | Nothing |
 | `tool.call` on `Read`, `Skill`, `Edit`, `Write` | Notices a stage's skill being used, a ticket being read, a test being written | Nothing |
 | `tool.call` on `mcp__open-effort__stage`, `__model`, `__report` | Answers the mod's own three tools | They are the mod's own tools |
 | `turn.start`, `turn.complete`, `session.start`, `session.end` | Tracks sub-agents at work, the turn's history entry, the project's switches | Nothing |
-| `command.run` on `open-effort` | Answers the mod's own `/open-effort` command | It is the mod's own command |
+| `command.run` on `open-effort` | Answers the mod's own `/open-effort` command: opens the pane, switches the mod, or, with `flow`, sends Claude the prompt to help write the flow file | It is the mod's own command; `flow` starts a turn of its own |
 | `ui.render` | Draws the band above the prompt and the pane | Adds the band and the pane |
 
 **Other calls.** Pressing a sub-agent's name in the band calls `$.ui.view`, which switches Claude Code's own view to that sub-agent's transcript, as its task list does. It sends nothing anywhere. The desktop app has no such view, so there the names are labels and nothing is called.
@@ -235,9 +260,10 @@ Test, typecheck, build and lint runs (JavaScript/TypeScript, Python, Go, Rust, N
 - A slow Haiku reading arrives during the turn; until it does, requests use the session's own effort, on the task's model.
 - A command typed with words after it (`/fix-typo the title`) counts as a new request; a command alone keeps the task.
 - A resumed session starts with no task; the flow comes back when Claude names its stage.
+- `/open-effort flow` hands Claude its prompt a moment after the command, as a turn of its own.
 - If Haiku cannot read a message (it times out or fails), the message starts a new task at the session's own effort, even when it was a reply.
-- Ticket lines work with ticket files on disk (`<feature>/issues/NN-*.md`). Tickets kept in GitHub or Linear get none of this.
-- In the implement stage, each ticket file Claude reads sets the effort Claude works at: the mod takes it as the ticket Claude works next.
+- Ticket lines work with ticket files on disk (`<feature>/issues/NN-*.md`, or where your flow's file says). Tickets kept in GitHub or Linear get none of this.
+- In the stage that works tickets (implement, in the Main Flow), each ticket file Claude reads sets the effort Claude works at: the mod takes it as the ticket Claude works next.
 - The notes to Claude are instructions, not enforcement.
 - The desktop app cannot open a sub-agent from the band, so there the band lists them as labels, not buttons.
 
@@ -257,7 +283,8 @@ claude plugin validate .
 | `hooks/policy.ts` | effort, the ladder, models, sub-agents, tickets |
 | `hooks/score.ts` | the Haiku reading |
 | `hooks/checks.ts` | which commands count as checks |
-| `hooks/main-flow.ts` | Main Flow stages and notes |
+| `hooks/flow.ts` | the flow: Matt's Main Flow, a project's own file, its skills and tickets |
+| `hooks/main-flow.ts` | the notes and tools for the flow |
 | `hooks/history.ts` | history entries |
 | `hooks/diagrams.ts` | the band, chart and themes as SVG |
 | `hooks/words.ts` | English and Thai text |

@@ -25,8 +25,33 @@ export type Score = {
   continues?: boolean
 }
 
-/** A part of the Main Flow, in order. */
-export type Stage = 'grill' | 'spec' | 'tickets' | 'implement' | 'review' | 'retro'
+/** A stage of the flow in use, by its name: Matt Pocock's Main Flow has grill, spec, tickets, implement, review, retro. */
+export type Stage = string
+
+/** A stage of a flow: its name, the skills that run it, and the effort it starts at. */
+export type FlowStage = { name: string; skills: string[]; effort: Effort }
+
+/** Which stage writes a flow's tickets and which works them, and where their files are: null as Matt's to-tickets keeps them. */
+export type FlowTickets = { write: string; work: string; files: string | null }
+
+/** A flow: Matt Pocock's Main Flow, built in, or the project's own from its file. */
+export type Flow = {
+  name: string
+  source: 'matt' | 'file'
+  /** Its stages, in order. */
+  stages: FlowStage[]
+  /** Where its tickets are written and worked; null for a flow without tickets. */
+  tickets: FlowTickets | null
+  /** The plugin its bare skill names belong to; absent, a bare name is any plugin's or the person's own. */
+  plugin?: string
+  /** Skills that run their stage only inside the flow: typed alone they start nothing. */
+  quiet?: string[]
+  /** The skills it needs installed to run; absent, every stage's. */
+  required?: string[]
+}
+
+/** The flow the project uses, the file it came from (null: none, Matt Pocock's), and what keeps the file from use. */
+export type FlowState = { flow: Flow; file: string | null; problem: string | null }
 
 /** A rung of the ladder: an effort, and whether it runs on Fable 5.1. */
 export type Rung = { effort: Effort; isFable: boolean }
@@ -44,9 +69,9 @@ export type Task = {
   isOnFable: boolean
   /** Whether it stalled at the top and Claude was told to ask the person. */
   isAtLadderEnd: boolean
-  /** The Main Flow stage it is in; null in normal mode. */
+  /** The flow stage it is in; null in normal mode. */
   stage: Stage | null
-  /** Whether the mod asked the person whether to take the Main Flow: only then may Claude's stage tool start it. */
+  /** Whether the mod asked the person whether to take the flow: only then may Claude's stage tool start it. */
   isFlowInvited: boolean
   /** The model the person chose for this task when the mod offered a more capable one; null for the session's. */
   model: string | null
@@ -55,8 +80,8 @@ export type Task = {
   /** The ticket Claude works in the implement stage, by its number; null when none. */
   ticket: string | null
   /**
-   * The stage whose skill Claude used on work done directly, outside the Main Flow (code-review, tdd): the task keeps
-   * at least that stage's effort, on the Main Flow's model; null when none.
+   * The stage whose skill Claude used on work done directly, outside the flow (code-review, tdd): the task keeps at
+   * least that stage's effort, on the flow's model; null when none.
    */
   skill: Stage | null
 }
@@ -83,7 +108,7 @@ export type SubAgent = {
 /** What a ticket names for itself: its `Model:` and `Effort:` lines, or Haiku's reading of it when it has none. */
 export type TicketSetting = { tier?: ModelTier; effort: Effort }
 
-/** What the person turned down this session: the largest work done without the Main Flow, the model kept instead. */
+/** What the person turned down this session: the largest work done without the flow, the model kept instead. */
 export type Declined = { flow: Size | null; model: ModelTier | null }
 
 /** The language picked in the pane; auto follows Claude Code's own setting. */
@@ -91,14 +116,14 @@ export type LanguageChoice = 'auto' | Language
 
 /**
  * The mod's switch for this machine, and this project's, which wins when set (null: follows the machine); and the
- * Main Flow's two switches, the same way.
+ * flow's two switches, the same way.
  */
 export type Switches = { machine: boolean; project: boolean | null; flowMachine: boolean; flowProject: boolean | null }
 
 /** The project the session works in: its repository's root (or the folder), and the root's last part. */
 export type Project = { root: string; name: string }
 
-/** How a turn's effort was chosen: from the score, or by the Main Flow's stage. */
+/** How a turn's effort was chosen: from the score, or by the flow's stage. */
 export type Mode = 'normal' | 'main-flow'
 
 /** What one model request of a turn went out with. */
@@ -112,7 +137,7 @@ export type HistoryEntry = {
   at: number
   mode: Mode
   score: Score | null
-  /** The Main Flow stage the turn ended in; null in normal mode. */
+  /** The flow stage the turn ended in; null in normal mode. */
   stage: Stage | null
   /** The task's starting point when the turn ended. */
   start: Effort | null
@@ -155,7 +180,7 @@ declare module 'claude-code' {
       isScoring: boolean
       /** The task as it stood when the prompt being scored was typed. */
       before: Task
-      /** What the person turned down this session: the Main Flow for work of a size, a model. */
+      /** What the person turned down this session: the flow for work of a size, a model. */
       declined: Declined
       /** Whether the main session's turn is running. */
       isTurnRunning: boolean
@@ -165,8 +190,10 @@ declare module 'claude-code' {
       isRed: boolean
       /** Haiku's readings of tickets without Model and Effort lines, by path, with the text read. */
       ticketReads: Record<string, { text: string; setting: TicketSetting }>
-      /** The Main Flow skills this session lacks; empty when Matt Pocock's skills are installed. */
+      /** The flow's skills this session lacks; empty when they are all installed. */
       missing: string[]
+      /** The flow the project uses: its own file's, or Matt Pocock's Main Flow. */
+      flow: FlowState
       turnLog: TurnLog
       /** The effort the main session's last request carried, before the mod changed it; null until one is seen. */
       sessionEffort: Effort | null

@@ -136,6 +136,31 @@ mod จะไม่เลือก `max` ให้เอง
 - แต่ละ ticket กำหนด `Model:` และ `Effort:` ของตัวเองได้ ถ้าส่ง ticket ให้ sub-agent ทำ sub-agent จะใช้โมเดลและ effort ตามที่ ticket ระบุ
 - ต้องติดตั้ง [skill ของ Matt Pocock](https://github.com/mattpocock/skills) ก่อน ถ้ายังไม่ครบ pane จะบอกว่าขาดตัวไหน
 
+#### flow ของคุณเอง
+
+แต่ละโปรเจกต์ใช้ flow ของตัวเองแทนของ Matt ได้ โดยเขียนไว้ใน `.claude/open-effort.json` ที่ root ของโปรเจกต์ หรือพิมพ์ `/open-effort flow` แล้ว Claude จะถามคุณเรื่อง flow และเขียนไฟล์ให้เมื่อคุณตกลง
+
+```json
+{
+  "name": "Team flow",
+  "stages": [
+    { "name": "plan",   "skills": ["my-plan"],          "effort": "high" },
+    { "name": "tasks",  "skills": ["my-tasks"],         "effort": "medium" },
+    { "name": "build",  "skills": ["my-build", "tdd"],  "effort": "high" },
+    { "name": "review", "skills": ["my-review"],        "effort": "xhigh" }
+  ],
+  "tickets": { "write": "tasks", "work": "build", "files": "docs/tasks/*.md" }
+}
+```
+
+- **หนึ่งโปรเจกต์ หนึ่ง flow:** ถ้าไม่มีไฟล์ โปรเจกต์จะใช้ Main Flow ของ Matt Pocock ถ้ามีไฟล์ จะใช้ flow ในไฟล์แทน commit ไฟล์นี้ขึ้น Git แล้วคนในทีมจะได้ flow เดียวกัน
+- **stage:** มี 2 ถึง 10 stage เรียงตามลำดับ ชื่อ stage ใช้ตัวเล็ก ตัวเลข หรือขีดกลาง ไม่เกิน 16 ตัวอักษร แต่ละ stage ระบุ skill ที่ใช้ ตามชื่อที่ขึ้นในรายการ skill ของ Claude Code (`my-skill` หรือ `plugin:my-skill` ถ้าต้องการเฉพาะของ plugin นั้น) และ effort ที่เริ่มต้น คือ `low`, `medium`, `high` หรือ `xhigh` skill หนึ่งตัวอยู่ได้ stage เดียว
+- **ticket ไม่ใส่ก็ได้:** ถ้าใส่ ให้บอกว่า stage ไหนเขียน ticket, stage ไหนที่อยู่หลังกว่าเป็นคนทำ ticket และ glob ของไฟล์ ticket ซึ่งชื่อไฟล์ต้องขึ้นต้นด้วยเลข (`01-login.md`) จากนั้น ticket จะทำงานเหมือนใน Main Flow คือมี `Model:` และ `Effort:` อยู่บนสุดของแต่ละไฟล์
+- **ทำงานเหมือน Main Flow:** ถ้างานใหญ่ Claude จะถามคุณก่อน หรือคุณพิมพ์คำสั่งของ stage เองก็ได้ Claude จะทำทีละ stage ตามลำดับ โดยใช้ skill ของแต่ละ stage ส่วนโมเดลของ flow ยังเลือกใน pane และใช้สวิตช์เดิม
+- **ในไฟล์มีแต่ค่าตั้ง** ไม่มีคำสั่งให้ Claude
+- **แก้ไฟล์แล้วมีผลตั้งแต่งานใหม่ถัดไป** flow ที่กำลังทำอยู่จะใช้ไฟล์เดิมจนจบ
+- **ถ้าไฟล์ผิด** หรือมี stage ที่ไม่ได้ติดตั้ง skill ของ stage นั้นเลยสักตัว flow จะปิดอยู่ (skill ใน stage เดียวกันใช้แทนกันได้ มีตัวเดียวก็พอ) และ pane จะบอกว่าผิดตรงไหน ส่วนอื่นทำงานตามปกติ
+
 #### sub-agent ใน Main Flow
 
 <p align="center">
@@ -176,7 +201,7 @@ effort ของ sub-agent แบบ general-purpose จะเท่ากับ
 </p>
 
 - **เปิด/ปิด** สำหรับโปรเจกต์นี้ (หรือพิมพ์ `/open-effort on` / `off`)
-- **Main Flow:** เปิด/ปิด และเลือกโมเดลที่จะใช้
+- **Flow:** บอกว่าโปรเจกต์ใช้ flow ไหน (Main Flow ของ Matt หรือไฟล์ของโปรเจกต์เอง) เปิด/ปิด และเลือกโมเดลที่จะใช้
 - **ภาษา:** อัตโนมัติ, ไทย หรือ English
 - **ธีมสี:** Claude, มะนาว, ฟ้า หรือ ชมพู
 - **ประวัติ:** 500 turn ล่าสุดของโปรเจกต์
@@ -207,8 +232,8 @@ effort ของ sub-agent แบบ general-purpose จะเท่ากับ
 - **ส่งอะไรออกไป และส่งไปที่ไหน:** mod ไม่ได้ติดต่อ server ใดๆ เอง ส่งข้อความไปที่เดียวคือโมเดล Haiku ของ Claude ผ่านช่องทางเรียกโมเดลของ Claude Code เอง (`$.model.complete`) ด้วยบัญชีของคุณ เหมือน request อื่นๆ ของ Claude Code สิ่งที่ส่งมี
   - ข้อความงานใหม่ที่คุณพิมพ์ และ 800 ตัวอักษรท้ายสุดของข้อความล่าสุดของ Claude ตอนที่มีงานค้างอยู่ เพื่อประเมินว่างานยากแค่ไหน
   - เนื้อหาไฟล์ ticket ที่ไม่ได้ระบุ `Model:` และ `Effort:` เพื่อประเมินแบบเดียวกัน
-- **ข้อความแนะนำถึง Claude:** mod เพิ่มข้อความสั้นๆ ให้ Claude ในแชท (`$.session.append` และ context แนบกับ prompt ของคุณ) เช่น ให้ถามคุณเรื่องโมเดลที่เก่งกว่าหรือ Main Flow, วิธีเขียนโมเดลและ effort ใน ticket และเมื่อไรควรหยุดถามคุณ ข้อความเหล่านี้ส่งไปถึง Claude พร้อมบทสนทนา เหมือนข้อความของคุณ
-- อ่านไฟล์แค่ ticket (`<feature>/issues/NN-*.md`) ตอนอยู่ในขั้นตอน implement และไม่เขียนไฟล์ใดๆ
+- **ข้อความแนะนำถึง Claude:** mod เพิ่มข้อความสั้นๆ ให้ Claude ในแชท (`$.session.append` และ context แนบกับ prompt ของคุณ) เช่น ให้ถามคุณเรื่องโมเดลที่เก่งกว่าหรือ flow, วิธีเขียนโมเดลและ effort ใน ticket และเมื่อไรควรหยุดถามคุณ ข้อความเหล่านี้ส่งไปถึง Claude พร้อมบทสนทนา เหมือนข้อความของคุณ ส่วนคำสั่ง `/open-effort flow` จะส่ง prompt ของตัวเองหนึ่งข้อความให้ Claude (`$.prompt.submit`) เพื่อให้ช่วยเขียนไฟล์ flow โดยในข้อความมีชื่อ skill และคำสั่งที่คุณติดตั้งไว้
+- อ่านไฟล์ 2 แบบ คือไฟล์ flow ของโปรเจกต์ (`.claude/open-effort.json`) ถ้ามี และไฟล์ ticket ใน stage ที่ทำ ticket (`<feature>/issues/NN-*.md` ใน Main Flow หรือที่ที่ไฟล์ flow ของคุณระบุ) mod ไม่เขียนไฟล์ใดๆ เอง ส่วน `/open-effort flow` ให้ Claude เป็นคนเขียนไฟล์ flow เมื่อคุณตกลง เหมือนที่ Claude เขียนไฟล์อื่นๆ
 - เพิ่ม tool ของตัวเอง 3 ตัว คือ `stage`, `model` และ `report` และคำสั่ง `/open-effort`
 
 ### แต่ละ hook ทำอะไร
@@ -217,12 +242,12 @@ effort ของ sub-agent แบบ general-purpose จะเท่ากับ
 |---|---|---|
 | `turn.step` | ตั้ง effort ของ request ที่ส่งไปโมเดลแต่ละครั้ง และเปลี่ยนโมเดลเมื่องานย้ายไปใช้โมเดลอื่น | `effort` และ `model` ของ request |
 | `tool.call` ที่ `Agent` | ตั้งโมเดลและ effort ของ sub-agent ตามประเภท หรือตาม ticket ที่ส่งให้ | `model` และ `effort` ของการเรียก เฉพาะเมื่อการเรียกไม่ได้ระบุเอง |
-| `prompt.submit` | ให้ Haiku ประเมินงานใหม่ และแนบข้อความแนะนำเมื่อมีเรื่องต้องถามคุณ | แนบ context ไปกับ prompt โดยไม่แก้ข้อความที่คุณพิมพ์ |
+| `prompt.submit` | อ่านไฟล์ flow ของโปรเจกต์ทุกครั้งที่เริ่มงานใหม่ ให้ Haiku ประเมินงานใหม่ และแนบข้อความแนะนำเมื่อมีเรื่องต้องถามคุณ | แนบ context ไปกับ prompt โดยไม่แก้ข้อความที่คุณพิมพ์ |
 | `tool.call` ที่ `Bash` | นับ test, lint, build และ typecheck ว่าผ่านหรือไม่ผ่าน | ไม่เปลี่ยนอะไร |
 | `tool.call` ที่ `Read`, `Skill`, `Edit`, `Write` | สังเกตว่ามีการใช้ skill ของขั้นตอนไหน อ่าน ticket ไหน หรือเขียน test | ไม่เปลี่ยนอะไร |
 | `tool.call` ที่ `mcp__open-effort__stage`, `__model`, `__report` | ตอบ tool 3 ตัวของ mod เอง | เป็น tool ของ mod เอง |
 | `turn.start`, `turn.complete`, `session.start`, `session.end` | ติดตาม sub-agent ที่ทำงานอยู่ บันทึกประวัติของแต่ละ turn และโหลดสวิตช์ของโปรเจกต์ | ไม่เปลี่ยนอะไร |
-| `command.run` ที่ `open-effort` | ตอบคำสั่ง `/open-effort` ของ mod เอง | เป็นคำสั่งของ mod เอง |
+| `command.run` ที่ `open-effort` | ตอบคำสั่ง `/open-effort` ของ mod เอง: เปิด pane, เปิดปิด mod หรือถ้าพิมพ์ `flow` จะส่ง prompt ให้ Claude ช่วยเขียนไฟล์ flow | เป็นคำสั่งของ mod เอง ส่วน `flow` จะเริ่ม turn ใหม่ของตัวเอง |
 | `ui.render` | วาดแถบเหนือช่องแชทและ pane | เพิ่มแถบและ pane |
 
 **คำสั่งอื่น:** เมื่อคุณกดชื่อ sub-agent บนแถบ mod จะเรียก `$.ui.view` เพื่อสลับหน้าจอของ Claude Code ไปแสดง transcript ของ sub-agent ตัวนั้น เหมือนกดจากรายการ task ของ Claude Code เอง คำสั่งนี้ไม่ได้ส่งข้อมูลออกไปไหน ส่วนในแอป desktop ไม่มีหน้าจอแบบนี้ ชื่อ sub-agent จึงเป็นข้อความธรรมดา และไม่มีการเรียกคำสั่งนี้
@@ -235,10 +260,11 @@ effort ของ sub-agent แบบ general-purpose จะเท่ากับ
 - ถ้าเปลี่ยนโมเดลของงาน prompt cache ของงานนั้นจะต้องเริ่มใหม่
 - ถ้า Haiku ตอบช้า ระหว่างรอ request จะใช้ effort ของ session บนโมเดลของงานไปก่อน
 - คำสั่ง slash ที่พิมพ์ข้อความต่อท้าย (เช่น `/fix-typo the title`) จะนับเป็นงานใหม่ ส่วนคำสั่งที่ไม่มีข้อความต่อท้ายจะใช้งานเดิมต่อ
-- session ที่ resume กลับมาจะเริ่มโดยไม่มีงานค้าง แต่ Main Flow จะกลับมาเมื่อ Claude เรียก stage ของขั้นตอนที่ทำค้างไว้
+- session ที่ resume กลับมาจะเริ่มโดยไม่มีงานค้าง แต่ flow จะกลับมาเมื่อ Claude เรียก stage ของขั้นตอนที่ทำค้างไว้
+- `/open-effort flow` จะส่ง prompt ให้ Claude หลังคำสั่งทำงานเสร็จครู่หนึ่ง เป็น turn ใหม่ของตัวเอง
 - ถ้า Haiku ประเมินข้อความไม่ได้ (หมดเวลาหรือเกิดข้อผิดพลาด) ข้อความนั้นจะเริ่มเป็นงานใหม่ที่ effort ของ session แม้ว่าจะเป็นการตอบคำถามของ Claude ก็ตาม
-- `Model:` และ `Effort:` ของ ticket ใช้ได้กับ ticket ที่เป็นไฟล์ในเครื่อง (`<feature>/issues/NN-*.md`) เท่านั้น ถ้าเก็บ ticket ไว้ใน GitHub หรือ Linear จะไม่มีผล
-- ในขั้นตอน implement ทุกครั้งที่ Claude อ่านไฟล์ ticket mod จะถือว่า Claude กำลังจะทำ ticket นั้น และเปลี่ยน effort ตาม ticket
+- `Model:` และ `Effort:` ของ ticket ใช้ได้กับ ticket ที่เป็นไฟล์ในเครื่อง (`<feature>/issues/NN-*.md` หรือที่ที่ไฟล์ flow ของคุณระบุ) เท่านั้น ถ้าเก็บ ticket ไว้ใน GitHub หรือ Linear จะไม่มีผล
+- ใน stage ที่ทำ ticket (implement ใน Main Flow) ทุกครั้งที่ Claude อ่านไฟล์ ticket mod จะถือว่า Claude กำลังจะทำ ticket นั้น และเปลี่ยน effort ตาม ticket
 - ข้อความที่ mod ส่งให้ Claude เป็นแค่คำแนะนำ Claude อาจไม่ทำตามทุกครั้ง
 - แอป desktop เปิด sub-agent จากแถบไม่ได้ แถบจึงแสดงรายชื่อ sub-agent เป็นข้อความธรรมดา ไม่ใช่ปุ่ม
 

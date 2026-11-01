@@ -241,7 +241,7 @@ test('the history names the stage', async ($, on) => {
   await request($, 'high')
   await finish($)
 
-  expect(await paneText($)).toContain('Main Flow: tickets')
+  expect(await paneText($)).toContain('Flow: tickets')
 })
 
 test('with the Main Flow switched off, stages change nothing', async ($, on) => {
@@ -265,12 +265,12 @@ test('a stage skill that fails to run starts no stage', async ($, on) => {
   expect(await effortNow($, sent)).not.toBe('medium')
 })
 
-test('the stage tool says when a task was not sent into the Main Flow', async ($, on) => {
+test('the stage tool says when a task was not sent into the flow', async ($, on) => {
   await flow(on, { haiku: 'clarity=goal hard=no risky=no size=small' })
   await start($)
   await type($, 'add a coupon field')
 
-  expect(JSON.stringify(await stage($, 'implement'))).toContain('not sent into the Main Flow')
+  expect(JSON.stringify(await stage($, 'implement'))).toContain('not sent into the flow')
 })
 
 test('entering the Main Flow moves a Sonnet session’s task to the frontier model', async ($, on) => {
