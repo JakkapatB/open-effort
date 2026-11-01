@@ -96,6 +96,18 @@ export function modelNote(offered: string, own: string): string {
   ].join('\n')
 }
 
+/**
+ * Sent when checks keep failing at the top effort of the task's model: Claude stops and asks the person whether to
+ * move the task one model family up, and reports the answer through the model tool.
+ */
+export function climbOfferNote(offered: string, own: string): string {
+  return [
+    `[open-effort] The checks keep failing at the highest effort on ${own}. Stop retrying for now.`,
+    `Ask the person once with AskUserQuestion whether to move this task to ${offered} (first option, marked as recommended; say that it costs more and that the task starts again on it at high effort) or to stay on ${own}.`,
+    'Then call mcp__open-effort__model with their answer: "up" or "keep". If they keep the model, three more failing checks stop the work and you ask them how to proceed.',
+  ].join('\n')
+}
+
 /** Sent as the stage that writes tickets starts: every ticket names the model and effort it needs. */
 const TICKET_NOTE = [
   '[open-effort] Near the top of every ticket you write, put two lines: `Model:` (haiku, sonnet, opus or fable) and `Effort:` (low, medium, high or xhigh).',

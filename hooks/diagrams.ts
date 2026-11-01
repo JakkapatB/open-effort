@@ -38,6 +38,7 @@ export function bandKeys(task: Task): string[] {
     `head:${task.stage ?? (task.skill ? `skill:${task.skill}` : 'read')}`,
     `effort:${task.stage ?? ''}:${task.effort ?? ''}`,
     ...(task.isAtLadderEnd ? ['end'] : []),
+    ...(task.isClimbOffer && task.modelOffer && !task.isAtLadderEnd ? [`offer:${task.modelOffer}`] : []),
     ...(task.climbed ? [`climb:${task.climbed.effort}:${task.climbed.isFable}`] : []),
     ...(task.fails > 0 && !task.isAtLadderEnd ? [`fail:${task.fails}`] : []),
     ...(task.stage ? ['track', `stage:${task.stage}`] : []),

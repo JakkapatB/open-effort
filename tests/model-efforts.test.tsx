@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import { fitEffort, supportedEfforts } from '../hooks/policy'
-import { BAND, engine, fail, request, start, type } from './engine'
+import { BAND, answerOffer, askPerson, engine, fail, request, start, type } from './engine'
 
 const CLEAR = 'clarity=clear hard=no risky=no size=small'
 const HARD = 'clarity=clear hard=yes risky=no size=large'
@@ -33,8 +33,8 @@ test('hard work on Opus 4.6 goes out at high, since it takes no xhigh', async ($
   expect(sent.map(e => e.effort)).toEqual(['high'])
 })
 
-test('on Opus 4.6 the ladder skips xhigh and moves to Fable 5.1 after high', async ($, on) => {
-  const { sent, bash } = engine(on, { haiku: CLEAR })
+test('on Opus 4.6 the ladder skips xhigh, and after high offers Fable 5.1', async ($, on) => {
+  const { sent, bash, conversation } = engine(on, { haiku: CLEAR })
   await start($)
   await type($, 'rename getUser to fetchUser')
   for (let i = 0; i < 3; i++) {
@@ -42,10 +42,14 @@ test('on Opus 4.6 the ladder skips xhigh and moves to Fable 5.1 after high', asy
     await fail($, bash)
   }
   await request($, 'high', 3, 'claude-opus-4-6')
+  askPerson(conversation)
+  await answerOffer($, 'up')
+  await request($, 'high', 4, 'claude-opus-4-6')
 
   expect(sent.map(e => [e.model, e.effort])).toEqual([
     ['claude-opus-4-6', 'low'],
     ['claude-opus-4-6', 'medium'],
+    ['claude-opus-4-6', 'high'],
     ['claude-opus-4-6', 'high'],
     ['claude-fable-5-1', 'high'],
   ])

@@ -67,6 +67,15 @@ export type Task = {
   fails: number
   /** Whether it reached Fable 5.1, which it keeps to its end. */
   isOnFable: boolean
+  /**
+   * The model a climb moved it to once the person agreed, one family up from the one it ran on; kept to its end (in a
+   * flow, to the next stage or ticket). Null when none.
+   */
+  climbModel: string | null
+  /** Whether `modelOffer` is the next model up, offered because checks kept failing at the top effort. */
+  isClimbOffer: boolean
+  /** Whether the person kept its model when a climb offered the next one up: its next stall at the top stops and asks. */
+  isClimbDeclined: boolean
   /** Whether it stalled at the top and Claude was told to ask the person. */
   isAtLadderEnd: boolean
   /** The flow stage it is in; null in normal mode. */
@@ -75,7 +84,7 @@ export type Task = {
   isFlowInvited: boolean
   /** The model the person chose for this task when the mod offered a more capable one; null for the session's. */
   model: string | null
-  /** The model family offered, awaiting the person's answer; null when none is. */
+  /** The model family offered, as the task started or by a climb, awaiting the person's answer; null when none is. */
   modelOffer: ModelTier | null
   /** The ticket Claude works in the implement stage, by its number; null when none. */
   ticket: string | null

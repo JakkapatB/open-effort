@@ -204,6 +204,16 @@ export function engine(on: On, options: EngineOptions = {}) {
 
 export const DAY_MS = 24 * 60 * 60 * 1000
 
+/** Claude asks the person a question, as a note from the mod tells it to. */
+export function askPerson(conversation: SessionMessage[]) {
+  conversation.push({ role: 'assistant', text: 'Which model?', toolUses: [{ tool_use_id: `q${conversation.length}`, tool: 'AskUserQuestion', input: { questions: [] } }] })
+}
+
+/** Claude reports the person's answer to a model offer: "up" or "keep". */
+export function answerOffer($: Engine, choice: string) {
+  return $.tool.call({ tool: 'mcp__open-effort__model', choice } as never)
+}
+
 /** The main session's turn ends with an answer. */
 export async function finish($: Engine) {
   await $.turn.complete({ turnId: 't1', answer: 'done', durationMs: 1000, isAborted: false, reason: 'answer' })

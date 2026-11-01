@@ -9,9 +9,9 @@ import { EMPTY_TURN, appended, entryOf, historyFrom, historyKey, projectKey, pro
 import {
   FLOW_FILE, INSTALL_COMMANDS, MATT_FLOW, flowFrom, lastStage, missingSkills, stageEffort, stageOfPath, stageOfSkill, startsFlow, ticketIn, ticketOf,
 } from './flow'
-import { IMPLEMENT_NOTE, MODEL_TOOL_SPEC, STAGE_TOOL, STAGE_TOOL_SPEC, askNote, flowStartedNote, flowWriteNote, modelNote, routeOf, ticketNote } from './main-flow'
+import { IMPLEMENT_NOTE, MODEL_TOOL_SPEC, STAGE_TOOL, STAGE_TOOL_SPEC, askNote, climbOfferNote, flowStartedNote, flowWriteNote, modelNote, routeOf, ticketNote } from './main-flow'
 import {
-  EFFORTS, FABLE_MODEL, FAILS_TO_STALL, FLOW_MODELS, FRESH_TASK, TIER_MODEL, afterAgentCheck, afterCheck, afterTicketAgentCheck, enteredStage, enteredTicket,
+  EFFORTS, FABLE_MODEL, FAILS_TO_STALL, FLOW_MODELS, FRESH_TASK, TIER_MODEL, afterAgentCheck, afterCheck, afterTicketAgentCheck, climbedTo, enteredStage, enteredTicket,
   fitEffort, flowModelFor, isBuiltInAgent, isEffort, isFable, isFlowModel, modelUp, rungOf, startingEffort, subAgentStart, supportedEfforts, taskModel, usedStageSkill,
   isSizeAtMost, isTierAtMost, largerSize, ticketLinesOf, tierOf,
 } from './policy'
@@ -542,14 +542,27 @@ export const register: Register = on => {
   })).catch(() => ({ result: 'open-effort: the report failed.' }))
 
   // Claude reports the person's answer to a model offer: up moves the task to the model offered, for the rest of it.
+  // An offer a climb made moves it there at high effort; keep leaves it on its model, and its next stall at the top
+  // stops and asks.
   on('tool.call', { tool: 'mcp__open-effort__model' }, async ($, e) => {
     const choice = (e as { choice?: unknown }).choice
-    const offer = (await read($, task)).modelOffer
+    const asked = await read($, task)
+    const offer = asked.modelOffer
     if (!offer) return { result: 'open-effort: no model was offered for this task, so this changes nothing.' }
     if (choice !== 'up' && choice !== 'keep') return { result: 'open-effort: the choice must be up or keep.' }
     // "up" costs the person more: it stands only on their answer to a question Claude asked after the offer.
     if (choice === 'up' && !(await askedSince($, await read($, offerAt)))) {
       return { result: 'open-effort: ask the person first with AskUserQuestion, then call this with their answer. The task stays on its model.' }
+    }
+    if (asked.isClimbOffer) {
+      if (choice === 'keep') {
+        await setTask($, (t): Task => ({ ...t, modelOffer: null, isClimbOffer: false, isClimbDeclined: true }))
+        return { result: 'open-effort: this task stays on its model; three more failing checks stop the work, and you ask the person how to proceed.' }
+      }
+      const from = rungOf(asked, await read($, sessionEffort), taskModel(asked, (await read($, sessionModel)) ?? (await sessionModelNow($))))?.effort ?? null
+      await setTask($, t => climbedTo(t, offer, from))
+      await update($, turnLog, (log): TurnLog => ({ ...log, climbs: log.climbs + 1 }))
+      return { result: `open-effort: this task now runs on ${modelName(TIER_MODEL[offer])}, from high effort.` }
     }
     if (choice === 'keep') await update($, declined, d => ({ ...d, model: d.model && isTierAtMost(offer, d.model) ? d.model : offer }))
     const model = TIER_MODEL[offer]
@@ -683,7 +696,7 @@ export const register: Register = on => {
           // While a new prompt's score is on its way, the task under way is not yet known to go on: the request keeps
           // its model, Fable 5.1 included, so the prompt cache holds, and leaves its effort for the session's own.
           const under = await read($, task)
-          const t = (await read($, isScoring)) ? { ...FRESH_TASK, model: under.model, isOnFable: under.isOnFable || !!under.climbed?.isFable, effort: carried } : under
+          const t = (await read($, isScoring)) ? { ...FRESH_TASK, model: under.model, climbModel: under.climbModel, isOnFable: under.isOnFable || !!under.climbed?.isFable, effort: carried } : under
           const runsOn = taskModel(t, e.model) ?? e.model
           const rung = rungOf(t, null, runsOn)
           // The task's model: the one the person chose for it, or Fable 5.1 once it climbed there.
@@ -731,7 +744,8 @@ export const register: Register = on => {
     // session's climbs and the Fable 5.1 they reached are for its own stalls, not a new agent's search or plan. While
     // a new prompt's score is on its way, the task under way is not yet known to go on: only its model holds.
     const under = await read($, task)
-    const t = (await read($, isScoring)) ? { ...FRESH_TASK, model: under.model } : under
+    // The model a climb moved the main session to is for its own stalls too: a new agent starts on the task's.
+    const t = (await read($, isScoring)) ? { ...FRESH_TASK, model: under.model } : { ...under, climbModel: null }
     const own = await read($, sessionModel)
     const runsOn = taskModel(t, own)
     const startEffort = t.effort ?? (await read($, sessionEffort))
@@ -795,7 +809,7 @@ export const register: Register = on => {
         if (!passed) return ran
       }
       // The family it climbs from: its ticket's, else the model its requests go out on, else the task's.
-      const startTier: ModelTier = agent.tier ?? tierOf(agent.model ?? null) ?? tierOf(taskModel(await read($, task), await read($, sessionModel))) ?? 'opus'
+      const startTier: ModelTier = agent.tier ?? tierOf(agent.model ?? null) ?? tierOf(taskModel({ ...(await read($, task)), climbModel: null }, await read($, sessionModel))) ?? 'opus'
       const after = agent.ticket ? afterTicketAgentCheck({ ...agent, isRed: false }, passed, startTier) : afterAgentCheck({ ...agent, isRed: false }, passed, agent.model ?? null)
       await update($, agents, all => withAgent(all, id, after))
       return ran
@@ -806,13 +820,25 @@ export const register: Register = on => {
       if (!passed) return ran
     }
     const own = await read($, sessionEffort)
-    const model = taskModel(await read($, task), await read($, sessionModel))
+    // The model the session's last request went out on; before any request, the one /model shows.
+    const model = taskModel(await read($, task), (await read($, sessionModel)) ?? (await sessionModelNow($)))
     // A model that takes no effort has no ladder to climb: its checks change nothing.
     if (supportedEfforts(model).length === 0) return ran
     const out = afterCheck(await read($, task), ran.isError !== true, own, model)
     await setTask($, () => out.task)
     if (out.hasClimbed) await update($, turnLog, (log): TurnLog => ({ ...log, climbs: log.climbs + 1 }))
     if (out.hasReachedLadderEnd) await $.session.append({ message: { type: 'user', content: [{ type: 'text', text: LADDER_END_NOTE }] } })
+    // At the top effort of its model the task moves one family up only on the person's yes: Claude stops and asks.
+    if (out.offer) {
+      await update($, offerAt, () => 0)
+      try {
+        const count = (await $.session.messages()).length
+        await update($, offerAt, () => count)
+      } catch {
+        // Any question asked counts.
+      }
+      await $.session.append({ message: { type: 'user', content: [{ type: 'text', text: climbOfferNote(modelName(TIER_MODEL[out.offer]), modelName(model)) }] } })
+    }
     return ran
   }).catch(($, e, next) => next(e))
 
@@ -897,13 +923,16 @@ export const register: Register = on => {
     const rung = rungOf(t, own, model)
     // The flow as the band names it: Matt's as the Main Flow, a project's own by its name.
     const flowName = flow.source === 'matt' ? words.steps.stage : short(flow.name)
+    const climbOffer = t.isClimbOffer && t.modelOffer ? t.modelOffer : null
     const why: Why =
       t.isAtLadderEnd ? { kind: 'ladderEnd' }
+      : climbOffer ? { kind: 'climbOffer' }
       : t.climbed ? { kind: 'climbed' }
       : t.stage ? { kind: 'stage' }
       : t.score && t.effort ? { kind: 'scored', score: t.score }
       : { kind: 'own' }
-    const onFable = !!rung?.isFable && !isFable(model)
+    // Fable 5.1 a climb reached is named; a session that runs on Fable from the start shows it as its model.
+    const onFable = !!rung?.isFable && (!isFable(model) || isFable(t.climbModel))
     const line = words.band(rung?.effort ?? null, onFable, why, t.stage, flowName)
     const pane = <Button key="pane" label="≡" onPress={() => togglePane($)} />
     if (e.surface === 'terminal' || !('Svg' in table)) {
@@ -954,6 +983,7 @@ export const register: Register = on => {
         ...(loop ? { loop } : {}),
       },
       ...(t.isAtLadderEnd ? [{ title: words.steps.stopped, value: words.steps.atEnd, state: 'red', rank: 6 } as Step] : []),
+      ...(climbOffer && !t.isAtLadderEnd ? [{ title: words.steps.asking, value: `↑ ${modelName(TIER_MODEL[climbOffer])}`, state: 'alert', rank: 6 } as Step] : []),
     ]
     const last = steps[steps.length - 1]
     if (last) steps[steps.length - 1] = { ...last, isWorking: true }

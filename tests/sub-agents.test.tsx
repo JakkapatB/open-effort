@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
-import { agentRequest, engine, fail, request, run, start, type } from './engine'
+import { agentRequest, answerOffer, askPerson, engine, fail, request, run, start, type } from './engine'
 
 const GOAL = 'clarity=goal hard=no risky=no size=small'
 
@@ -41,11 +41,25 @@ test('a general-purpose sub-agent starts at the task’s starting effort, not at
 })
 
 test('after the main session climbed to Fable 5.1, a new sub-agent still starts on the task’s model', async ($, on) => {
-  const { calls, bash } = engine(on, { haiku: 'clarity=clear hard=yes risky=no size=small' })
+  const { calls, bash, conversation } = engine(on, { haiku: 'clarity=clear hard=yes risky=no size=small' })
   await start($)
   await type($, 'fix the race in the cart lock')
   await request($, 'high')
   await fail($, bash)
+  askPerson(conversation)
+  await answerOffer($, 'up')
+
+  expect(await spawn($, calls, {})).toEqual({ model: undefined, effort: 'xhigh' })
+})
+
+test('after a Sonnet session climbed to Opus 5.5, a new sub-agent still starts on the session’s model', async ($, on) => {
+  const { calls, bash, conversation } = engine(on, { haiku: 'clarity=clear hard=yes risky=no size=small', model: 'claude-sonnet-5-5' })
+  await start($)
+  await type($, 'fix the race in the cart lock')
+  await request($, 'high', 0, 'claude-sonnet-5-5')
+  await fail($, bash)
+  askPerson(conversation)
+  await answerOffer($, 'up')
 
   expect(await spawn($, calls, {})).toEqual({ model: undefined, effort: 'xhigh' })
 })

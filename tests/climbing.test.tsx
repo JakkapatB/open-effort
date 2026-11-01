@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'claude-code/testing'
 
-import { BAND, bandText, engine, fail, request, run, start, type } from './engine'
+import { BAND, answerOffer, askPerson, bandText, engine, fail, request, run, start, type } from './engine'
 
 const CLEAR = 'clarity=clear hard=no risky=no size=small'
 const GOAL = 'clarity=goal hard=no risky=no size=small'
@@ -119,12 +119,20 @@ for (const command of CHECKS) {
   })
 }
 
-test('the ladder climbs through every effort, then Fable 5.1, then asks the person', async ($, on) => {
-  const { sent, bash } = engine(on, { haiku: CLEAR })
+test('the ladder climbs every effort on the model, asks before Fable 5.1, climbs it, then stops and asks', async ($, on) => {
+  const { sent, bash, conversation } = engine(on, { haiku: CLEAR })
   const session = mock.session(on)
   await start($)
   await type($, 'rename getUser to fetchUser')
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < 4; i++) {
+    await request($, 'high', i)
+    await fail($, bash)
+  }
+  // At xhigh on Opus 5.5 the task stays put until the person answers.
+  await request($, 'high', 4)
+  askPerson(conversation)
+  await answerOffer($, 'up')
+  for (let i = 5; i < 8; i++) {
     await request($, 'high', i)
     await fail($, bash)
   }
@@ -135,15 +143,97 @@ test('the ladder climbs through every effort, then Fable 5.1, then asks the pers
     ['claude-opus-5-5', 'medium'],
     ['claude-opus-5-5', 'high'],
     ['claude-opus-5-5', 'xhigh'],
+    ['claude-opus-5-5', 'xhigh'],
     ['claude-fable-5-1', 'high'],
     ['claude-fable-5-1', 'xhigh'],
     ['claude-fable-5-1', 'max'],
     ['claude-fable-5-1', 'max'],
-    ['claude-fable-5-1', 'max'],
   ])
-  const notes = session.appended().filter(row => JSON.stringify(row.message).includes('open-effort'))
-  expect(notes.length).toBe(1)
-  expect(JSON.stringify(notes[0]?.message)).toContain('ask')
+  const notes = session.appended().map(row => JSON.stringify(row.message)).filter(text => text.includes('open-effort'))
+  expect(notes.length).toBe(2)
+  expect(notes[0]).toContain('Fable 5.1')
+  expect(notes[0]).toContain('mcp__open-effort__model')
+  expect(notes[1]).toContain('ask the person how to proceed')
+})
+
+test('a Sonnet session climbs to Opus 5.5 with the person’s yes, at high, and offers Fable 5.1 at its top', async ($, on) => {
+  const { sent, bash, conversation } = engine(on, { haiku: GOAL, model: 'claude-sonnet-5-5' })
+  const session = mock.session(on)
+  await start($)
+  await type($, 'add a coupon field')
+  await request($, 'high', 0, 'claude-sonnet-5-5')
+  await fail($, bash)
+  await fail($, bash)
+  await fail($, bash)
+  expect(JSON.stringify(session.appended().at(-1)?.message)).toContain('Opus 5.5')
+  askPerson(conversation)
+  await answerOffer($, 'up')
+  await request($, 'high', 1, 'claude-sonnet-5-5')
+  await fail($, bash)
+  await fail($, bash)
+  await request($, 'high', 2, 'claude-sonnet-5-5')
+
+  expect(sent.map(e => [e.model, e.effort])).toEqual([
+    ['claude-sonnet-5-5', 'medium'],
+    ['claude-opus-5-5', 'high'],
+    ['claude-opus-5-5', 'xhigh'],
+  ])
+  expect(JSON.stringify(session.appended().at(-1)?.message)).toContain('Fable 5.1')
+})
+
+test('when the person keeps the model, the task stays on it and its next stall stops and asks, with no second offer', async ($, on) => {
+  const { sent, bash, conversation } = engine(on, { haiku: HARD })
+  const session = mock.session(on)
+  await start($)
+  await type($, 'fix the race in the order queue')
+  await fail($, bash)
+  askPerson(conversation)
+  const kept = await answerOffer($, 'keep')
+  await fail($, bash)
+  await request($, 'high', 0)
+
+  expect(JSON.stringify(kept)).toContain('stays on its model')
+  expect(sent.at(-1)).toMatchObject({ model: 'claude-opus-5-5', effort: 'xhigh' })
+  const notes = session.appended().map(row => JSON.stringify(row.message)).filter(text => text.includes('open-effort'))
+  expect(notes.length).toBe(2)
+  expect(notes[1]).toContain('ask the person how to proceed')
+})
+
+test('a stall while the offer waits for an answer makes no second offer', async ($, on) => {
+  const { bash } = engine(on, { haiku: HARD })
+  const session = mock.session(on)
+  await start($)
+  await type($, 'fix the race in the order queue')
+  await fail($, bash)
+  await fail($, bash)
+
+  expect(session.appended().filter(row => JSON.stringify(row.message).includes('mcp__open-effort__model')).length).toBe(1)
+})
+
+test('the person’s yes must come after Claude asked: a climb’s offer is no exception', async ($, on) => {
+  const { sent, bash } = engine(on, { haiku: HARD })
+  await start($)
+  await type($, 'fix the race in the order queue')
+  await fail($, bash)
+  const res = await answerOffer($, 'up')
+  await request($, 'high', 0)
+
+  expect(JSON.stringify(res)).toContain('ask the person first')
+  expect(sent.at(-1)?.model).toBe('claude-opus-5-5')
+})
+
+test('while the offer waits, the band says Claude is asking about the next model', async ($, on) => {
+  const { bash } = engine(on, { haiku: HARD })
+  await start($)
+  await type($, 'fix the race in the order queue')
+  await fail($, bash)
+
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const drawn = JSON.stringify(await ui.drawn())
+  await ui.unmount()
+  expect(drawn).toContain('Asking you')
+  expect(drawn).toContain('Fable 5.1')
+  expect(await bandText($, 'terminal')).toContain('Claude asks you about the next model up')
 })
 
 test('the first passing check after a climb settles back to the starting effort', async ($, on) => {
@@ -159,10 +249,12 @@ test('the first passing check after a climb settles back to the starting effort'
 })
 
 test('a task that reached Fable 5.1 stays on it after settling', async ($, on) => {
-  const { sent, bash } = engine(on, { haiku: HARD })
+  const { sent, bash, conversation } = engine(on, { haiku: HARD })
   await start($)
   await type($, 'fix the race in the order queue')
   await fail($, bash)
+  askPerson(conversation)
+  await answerOffer($, 'up')
   await request($, 'high', 0)
   await run($, bash, 'npm test', true)
   await request($, 'high', 1)
@@ -237,11 +329,13 @@ test('the band says the task climbed and why', async ($, on) => {
 })
 
 test('the band names Fable 5.1 once the task is on it', async ($, on) => {
-  const { bash } = engine(on, { settings: { language: 'thai' }, haiku: HARD })
+  const { bash, conversation } = engine(on, { settings: { language: 'thai' }, haiku: HARD })
   await start($)
   await type($, 'แก้ race ใน queue')
   await request($, 'high')
   await fail($, bash)
+  askPerson(conversation)
+  await answerOffer($, 'up')
 
   const text = await bandText($)
   expect(text).toContain('Fable 5.1')
@@ -314,11 +408,13 @@ test('while a new prompt waits for its score, its requests leave the last task�
 })
 
 test('settled back on Fable 5.1, the band still names Fable 5.1', async ($, on) => {
-  const { bash } = engine(on, { haiku: 'clarity=clear hard=yes risky=no size=small sure=90' })
+  const { bash, conversation } = engine(on, { haiku: 'clarity=clear hard=yes risky=no size=small sure=90' })
   await start($)
   await type($, 'fix the race in the cart lock')
   await request($, 'high', 0)
   await fail($, bash)
+  askPerson(conversation)
+  await answerOffer($, 'up')
   await run($, bash, 'npm test', true)
 
   const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
@@ -327,12 +423,14 @@ test('settled back on Fable 5.1, the band still names Fable 5.1', async ($, on) 
   expect(drawn).toContain('Effort · Fable 5.1')
 })
 
-test('a session the person runs at max climbs to Fable 5.1 at max, never down to high', async ($, on) => {
-  const { sent, bash } = engine(on, { haiku: 'timeout' })
+test('a session the person runs at max is asked about Fable 5.1, and moves there at max, never down to high', async ($, on) => {
+  const { sent, bash, conversation } = engine(on, { haiku: 'timeout' })
   await start($)
   await type($, 'fix the race in the cart lock')
   await request($, 'max', 0)
   await fail($, bash)
+  askPerson(conversation)
+  await answerOffer($, 'up')
   await request($, 'max', 1)
 
   expect(sent.map(e => [e.model, e.effort])).toEqual([
