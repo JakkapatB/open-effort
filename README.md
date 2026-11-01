@@ -91,7 +91,7 @@ When a test run fails, the effort card shows **Check failed 1/3**, then **2/3**.
 ## How it works
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/JakkapatB/open-effort/main/docs/images/flow-en.png" width="900" alt="The whole flow: a request is kept in the task or read by Haiku; a new task gets a starting effort, Claude asks about a stronger model and the Main Flow, Claude works, a passing check returns to the starting effort, three failures raise it one level, past xhigh it switches to Fable 5.1, and still failing at max Claude stops and asks you; the Main Flow, tickets, sub-agents and history are shown beside it">
+  <img src="https://raw.githubusercontent.com/JakkapatB/open-effort/main/docs/images/flow-en.png" width="900" alt="The whole flow: a request is kept in the task or read by Haiku; a new task gets a starting effort, Claude asks about a stronger model and the flow (Matt's Main Flow, or the project's own from .claude/open-effort.json), Claude works, a passing check returns to the starting effort, three failures raise it one level, past xhigh it switches to Fable 5.1, and still failing at max Claude stops and asks you; the flow's stages (Matt's by default), tickets, sub-agents and history are shown beside it">
 </p>
 
 ### The ladder
