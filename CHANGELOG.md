@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0
+
+### Minor Changes
+
+- 537263b: open-effort now tells you when a new version is out. Once a day (switch it off in the pane) and whenever you press Check now, it reads the newest version number from GitHub; when one is out, the band's ≡ shows a dot and the top of the pane shows Update now, which runs Claude Code's own plugin update, then Reload now. Where the update cannot run, the pane gives the command.
+
 ## 0.3.0
 
 ### Minor Changes
