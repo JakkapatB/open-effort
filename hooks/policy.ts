@@ -57,9 +57,15 @@ export function largerSize(a: Size | null, b: Size): Size {
   return a && SIZES.indexOf(a) > SIZES.indexOf(b) ? a : b
 }
 
-/** The model a task runs on: the one the person chose for it, else the session's. */
+/** The model a task runs on: the one a climb moved it to, else the one the person chose for it, else the session's. */
 export function taskModel(task: Task, sessionModel: string | null): string | null {
-  return task.model ?? sessionModel
+  return task.climbModel ?? task.model ?? sessionModel
+}
+
+/** The family one up from a model's; null at Fable, or for a model not known. */
+export function tierAbove(model: string | null): ModelTier | null {
+  const tier = tierOf(model)
+  return tier ? (TIERS[TIERS.indexOf(tier) + 1] ?? null) : null
 }
 
 export function isFable(model: string | null): boolean {
@@ -103,6 +109,9 @@ export const NEW_TASK: Omit<Task, 'score' | 'effort'> = {
   fails: 0,
   isOnFable: false,
   isAtLadderEnd: false,
+  climbModel: null,
+  isClimbOffer: false,
+  isClimbDeclined: false,
   stage: null,
   isFlowInvited: false,
   model: null,
@@ -115,8 +124,8 @@ export const NEW_TASK: Omit<Task, 'score' | 'effort'> = {
 export const FRESH_TASK: Task = { score: null, effort: null, ...NEW_TASK }
 
 /**
- * A task moved to a flow's stage: `effort`, the stage's, with the last stage's climb left behind, Fable 5.1 a climb
- * reached included (a flow that runs on Fable keeps it); its score stays.
+ * A task moved to a flow's stage: `effort`, the stage's, with the last stage's climb left behind, a model it climbed to
+ * and a climb's offer included (a flow that runs on Fable keeps it); its score stays.
  */
 export function enteredStage(task: Task, stage: Stage, effort: Effort): Task {
   return {
@@ -125,6 +134,9 @@ export function enteredStage(task: Task, stage: Stage, effort: Effort): Task {
     effort,
     climbed: null,
     isOnFable: isFable(task.model),
+    ...(task.isClimbOffer ? { modelOffer: null, isClimbOffer: false } : {}),
+    climbModel: null,
+    isClimbDeclined: false,
     fails: 0,
     isAtLadderEnd: false,
     ticket: null,
@@ -166,9 +178,8 @@ export function rungOf(task: Task, own: Effort | null, model: string | null): Ru
 }
 
 /**
- * The rung above: the next effort up to xhigh on `model`, the one the task runs on, then Fable 5.1 at high, xhigh
- * and max (on a task already on Fable, its max); null at the top. Max on the task's model, which only the person's
- * own session effort brings, climbs to Fable at max.
+ * The rung above on the model the task runs on (`model`): the next effort it takes up to xhigh, or on Fable 5.1 up to
+ * max; null at the top. A model one family up is never climbed to here: the person is asked first (afterCheck).
  */
 export function rungAbove(rung: Rung, model: string | null = null): Rung | null {
   const at = EFFORTS.indexOf(rung.effort)
@@ -178,21 +189,46 @@ export function rungAbove(rung: Rung, model: string | null = null): Rung | null 
   }
   // On the task's model the ladder goes no higher than xhigh, and only through the efforts that model takes.
   const next = supportedEfforts(model).find(effort => EFFORTS.indexOf(effort) > at && EFFORTS.indexOf(effort) <= EFFORTS.indexOf('xhigh'))
-  return next ? { effort: next, isFable: false } : { effort: rung.effort === 'max' ? 'max' : 'high', isFable: true }
+  return next ? { effort: next, isFable: false } : null
+}
+
+/** The effort a task starts at on a model a climb moved it to. */
+export const CLIMB_MODEL_EFFORT: Effort = 'high'
+
+/**
+ * The person agreed to move a climbed task one family up, to `tier`: from then on it runs on that family's model, at
+ * high and climbing from there (at max when `from`, the effort it stood at, was the max the person set), and keeps the
+ * model to its end (in a flow, to the next stage or ticket).
+ */
+export function climbedTo(task: Task, tier: ModelTier, from: Effort | null = null): Task {
+  const model = TIER_MODEL[tier]
+  const onFable = tier === 'fable'
+  return {
+    ...task,
+    climbModel: model,
+    climbed: { effort: fitEffort(from === 'max' ? 'max' : CLIMB_MODEL_EFFORT, model), isFable: onFable },
+    isOnFable: task.isOnFable || onFable,
+    fails: 0,
+    isAtLadderEnd: false,
+    modelOffer: null,
+    isClimbOffer: false,
+  }
 }
 
 /**
- * A check's outcome on a task: a pass clears the count and settles a climbed task back to its starting point (on
- * Fable if it reached it); the third failure in a row climbs a rung, or at the top reaches the ladder's end.
- * `hasReachedLadderEnd` is true the one time the task reaches the ladder's end.
+ * A check's outcome on a task: a pass clears the count and settles a climbed task back to its starting point (on the
+ * model it climbed to, if any); the third failure in a row climbs a rung. At the top effort of its model, the task
+ * offers the person the model one family up (`offer`, the one time it is offered), unless they kept the model once
+ * already or there is none above: then it reaches the ladder's end. `hasReachedLadderEnd` is true the one time the task
+ * reaches the ladder's end.
  */
 export function afterCheck(
   task: Task,
   passed: boolean,
   own: Effort | null,
   model: string | null,
-): { task: Task; hasClimbed: boolean; hasReachedLadderEnd: boolean } {
-  const unmoved = { hasClimbed: false, hasReachedLadderEnd: false }
+): { task: Task; hasClimbed: boolean; hasReachedLadderEnd: boolean; offer: ModelTier | null } {
+  const unmoved = { hasClimbed: false, hasReachedLadderEnd: false, offer: null }
   if (passed) return { task: { ...task, climbed: null, fails: 0, isAtLadderEnd: false }, ...unmoved }
   const fails = task.fails + 1
   if (fails < FAILS_TO_STALL) return { task: { ...task, fails }, ...unmoved }
@@ -200,8 +236,12 @@ export function afterCheck(
   const above = rungAbove(here, model)
   // An unscored task keeps the effort it climbed from as its starting point, so it can settle back to it.
   const effort = task.effort ?? (task.climbed ? null : here.effort)
-  if (!above) return { task: { ...task, effort, fails: 0, isAtLadderEnd: true }, hasClimbed: false, hasReachedLadderEnd: !task.isAtLadderEnd }
-  return { task: { ...task, effort, climbed: above, fails: 0, isOnFable: task.isOnFable || above.isFable }, hasClimbed: true, hasReachedLadderEnd: false }
+  if (above) return { task: { ...task, effort, climbed: above, fails: 0, isOnFable: task.isOnFable || above.isFable }, hasClimbed: true, hasReachedLadderEnd: false, offer: null }
+  const up = here.isFable || task.isClimbDeclined ? null : tierAbove(model)
+  // An offer already waiting for the person's answer is not made again.
+  if (up && task.isClimbOffer && task.modelOffer) return { task: { ...task, effort, fails: 0 }, ...unmoved }
+  if (up) return { task: { ...task, effort, fails: 0, modelOffer: up, isClimbOffer: true }, ...unmoved, offer: up }
+  return { task: { ...task, effort, fails: 0, isAtLadderEnd: true }, hasClimbed: false, hasReachedLadderEnd: !task.isAtLadderEnd, offer: null }
 }
 
 /** How high a sub-agent's own stalls climb its effort (max on a model without it); its model never changes. */
@@ -273,13 +313,25 @@ export function ticketLinesOf(text: string): Partial<TicketSetting> {
  * stays, and Fable 5.1 a climb on the last ticket reached is left behind.
  */
 export function enteredTicket(task: Task, ticket: string, effort: Effort): Task {
-  return { ...task, ticket, effort, climbed: null, fails: 0, isAtLadderEnd: false, isOnFable: isFable(task.model) }
+  return {
+    ...task,
+    ticket,
+    effort,
+    climbed: null,
+    fails: 0,
+    isAtLadderEnd: false,
+    isOnFable: isFable(task.model),
+    ...(task.isClimbOffer ? { modelOffer: null, isClimbOffer: false } : {}),
+    climbModel: null,
+    isClimbDeclined: false,
+  }
 }
 
 /**
  * A check a ticket's sub-agent ran: a pass clears the count; the third failure in a row climbs it, its effort first
- * up to xhigh through the efforts its model takes, then its model one family up at high, and on Fable 5.1 to max.
- * At the top it stays.
+ * up to xhigh through the efforts its model takes, then its model one family up at high, as far as Opus: a sub-agent
+ * cannot ask the person, and Fable 5.1 is only ever reached with their yes. A ticket that names Fable climbs to max.
+ * At the top it stays, and its work goes back to Claude.
  */
 export function afterTicketAgentCheck(agent: SubAgent, passed: boolean, startTier: ModelTier): SubAgent {
   if (passed) return { ...agent, fails: 0 }
@@ -290,7 +342,7 @@ export function afterTicketAgentCheck(agent: SubAgent, passed: boolean, startTie
   const next = effortAbove(here, tier === 'fable' ? 'max' : 'xhigh', TIER_MODEL[tier])
   if (next) return { ...agent, tier, climbed: next, fails: 0 }
   const up = TIERS[TIERS.indexOf(tier) + 1]
-  return up ? { ...agent, tier: up, climbed: 'high', fails: 0 } : { ...agent, fails: 0 }
+  return up && up !== 'fable' ? { ...agent, tier: up, climbed: 'high', fails: 0 } : { ...agent, fails: 0 }
 }
 
 /** The model the flow runs on: the frontier model, Fable 5.1, or the session's own. */

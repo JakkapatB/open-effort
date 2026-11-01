@@ -1,7 +1,7 @@
 import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
-import { BAND, MATT_SKILLS, PANE, PRESENTATION, bandText, engine, fail, finish, paneText, pressPane, request, start, type } from './engine'
+import { BAND, MATT_SKILLS, PANE, PRESENTATION, answerOffer, askPerson, bandText, engine, fail, finish, paneText, pressPane, request, start, type } from './engine'
 
 const LARGE = 'clarity=unclear hard=no risky=no size=large'
 const SKILLS = '/Users/me/.claude/plugins/cache/mattpocock/mattpocock-skills/1.3.2/skills'
@@ -465,11 +465,13 @@ test('a flow the person starts while a score is on its way stays when the score 
 })
 
 test('Fable 5.1 a climb reached in one stage is left behind as the next stage starts', async ($, on) => {
-  const { sent, bash } = await flow(on)
+  const { sent, bash, conversation } = await flow(on)
   await start($)
   await type($, 'add coupons to checkout')
   await stage($, 'review')
   await fail($, bash)
+  askPerson(conversation)
+  await answerOffer($, 'up')
   expect((await effortNow($, sent))).toBe('high')
   expect(sent.at(-1)?.model).toBe('claude-fable-5-1')
   await stage($, 'retro')

@@ -84,7 +84,7 @@ test('a sub-agent handed a ticket runs on the ticket’s model and effort', asyn
   expect([agentCall?.model, agentCall?.effort]).toEqual(['sonnet', 'high'])
 })
 
-test('a ticket’s sub-agent climbs its effort to xhigh, then a model up', async ($, on) => {
+test('a ticket’s sub-agent climbs its effort to xhigh, then a model up, and stops at Opus without asking for Fable', async ($, on) => {
   const { sent, bash } = engine(on, { haiku: LARGE, matt: MATT_SKILLS, files: FILES })
   await implementing($)
   await $.tool.call({ tool: 'Agent', tool_use_id: 'tu-3', description: 'ticket 03', prompt: `Implement ${T3} with TDD.` } as never)
@@ -92,7 +92,7 @@ test('a ticket’s sub-agent climbs its effort to xhigh, then a model up', async
   await $.turn.start({ text: `Implement ${T3} with TDD.`, turnId: 't-t3', agentId: 't3' })
   let index = 0
   await agentStep($, 't3', 'claude-sonnet-5-5', 'high', index++)
-  for (let round = 0; round < 2; round++) {
+  for (let round = 0; round < 4; round++) {
     for (let i = 0; i < 3; i++) await run($, bash, 'npm test', false, 't3')
     await agentStep($, 't3', 'claude-sonnet-5-5', 'high', index++)
   }
@@ -101,6 +101,8 @@ test('a ticket’s sub-agent climbs its effort to xhigh, then a model up', async
     ['claude-sonnet-5-5', 'high'],
     ['claude-sonnet-5-5', 'xhigh'],
     ['claude-opus-5-5', 'high'],
+    ['claude-opus-5-5', 'xhigh'],
+    ['claude-opus-5-5', 'xhigh'],
   ])
 })
 

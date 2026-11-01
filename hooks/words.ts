@@ -17,6 +17,7 @@ export type Why =
   | { kind: 'stage' }
   | { kind: 'climbed' }
   | { kind: 'ladderEnd' }
+  | { kind: 'climbOffer' }
 
 export type Words = {
   commandDescription: string
@@ -53,6 +54,8 @@ export type StepWords = {
   climbed: string
   failed: string
   stopped: string
+  /** A climb at the top effort of the task's model, waiting for the person's answer about the model one family up. */
+  asking: string
   /** The effort's title after a climb: where it climbed from. */
   from: (effort: Effort) => string
   /** The ticket Claude works in the stage that works tickets. */
@@ -111,6 +114,7 @@ type Phrases = {
   stage: string
   climbed: string
   ladderEnd: string
+  climbOffer: string
 }
 
 function scoreWords(p: Phrases, score: Score): string {
@@ -169,6 +173,7 @@ const EN_PHRASES: Phrases = {
   stage: "the stage's effort",
   climbed: `climbed: ${FAILS_TO_STALL} failing checks in a row`,
   ladderEnd: 'at the top: Claude will ask you',
+  climbOffer: 'top effort on this model: Claude asks you about the next model up',
 }
 
 const TH_PHRASES: Phrases = {
@@ -181,6 +186,7 @@ const TH_PHRASES: Phrases = {
   stage: 'effort ของ stage นี้',
   climbed: `ไต่ขึ้น: check ไม่ผ่าน ${FAILS_TO_STALL} ครั้งติด`,
   ladderEnd: 'สุดบันไดแล้ว: Claude จะถามคุณ',
+  climbOffer: 'effort สูงสุดของโมเดลนี้แล้ว: Claude จะถามคุณเรื่องโมเดลที่เก่งกว่า',
 }
 
 const EN: Words = {
@@ -199,6 +205,7 @@ const EN: Words = {
     climbed: 'Climbed',
     failed: 'Check failed',
     stopped: 'Stopped',
+    asking: 'Asking you',
     from: e => `↑ from ${e}`,
     ticket: n => `ticket ${n}`,
     agents: 'Sub-agents',
@@ -265,6 +272,7 @@ const TH: Words = {
     climbed: 'ไต่ขึ้น',
     failed: 'check ไม่ผ่าน',
     stopped: 'หยุด',
+    asking: 'ถามคุณ',
     from: e => `↑ จาก ${e}`,
     ticket: n => `ticket ${n}`,
     agents: 'Sub-agent',

@@ -20,7 +20,7 @@
 ## What it does
 
 - 🎯 **Fits the effort.** Haiku reads each new request: a clear plan starts at `low`, a hard one at `xhigh`.
-- 📈 **Raises the effort when stuck.** Three failing checks in a row raise the effort one level. Past the highest level it switches to Fable 5.1, and if checks still fail, Claude stops and asks you what to do.
+- 📈 **Raises the effort when stuck.** Three failing checks in a row raise the effort one level. Past the highest level, Claude asks whether to move up one model (Sonnet → Opus → Fable 5.1), and only with your yes does it move. If checks still fail at the top, Claude stops and asks you what to do.
 - 🧠 **Asks before switching models.** If the work needs a stronger model than the session's, Claude asks you first.
 - 🗺️ **Runs Matt Pocock's Main Flow.** Grill to retro, every stage and every ticket at its own effort.
 - 👀 **Shows what it uses, and why.** A band above the prompt shows the effort and model in use; a pane holds the switches, themes and history.
@@ -119,16 +119,18 @@ When a test run fails, the effort card shows **Check failed 1/3**, then **2/3**.
 ## How it works
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/JakkapatB/open-effort/main/docs/images/flow-en.png" width="900" alt="The whole flow: a request is kept in the task or read by Haiku; a new task gets a starting effort, Claude asks about a stronger model and the flow (Matt's Main Flow, or the project's own from .claude/open-effort.json), Claude works, a passing check returns to the starting effort, three failures raise it one level, past xhigh it switches to Fable 5.1, and still failing at max Claude stops and asks you; the flow's stages (Matt's by default), tickets, sub-agents and history are shown beside it">
+  <img src="https://raw.githubusercontent.com/JakkapatB/open-effort/main/docs/images/flow-en.png" width="900" alt="The whole flow: a request is kept in the task or read by Haiku; a new task gets a starting effort, Claude asks about a stronger model and the flow (Matt's Main Flow, or the project's own from .claude/open-effort.json), Claude works, a passing check returns to the starting effort, three failures raise it one level, past xhigh Claude asks to move up one model, Fable 5.1 at the top, and still failing at max Claude stops and asks you; the flow's stages (Matt's by default), tickets, sub-agents and history are shown beside it">
 </p>
 
 ### The ladder
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/JakkapatB/open-effort/main/docs/images/ladder-en.png" width="820" alt="low, medium, high, xhigh, then Fable 5.1 at high, xhigh and max; if checks still fail, Claude stops and asks you">
+  <img src="https://raw.githubusercontent.com/JakkapatB/open-effort/main/docs/images/ladder-en.png" width="820" alt="low, medium, high, xhigh on the task's model; then, only with your yes, one model up at high (Sonnet 5.5, Opus 5.5, Fable 5.1); on Fable 5.1 high, xhigh and max; if checks still fail, Claude stops and asks you">
 </p>
 
 When a check passes, the effort goes back to the level the task started at.
+
+At the top effort of its model the task never moves up by itself. Claude stops and asks you whether to move it up one model, which costs more. Yes moves the task there at `high`, for the rest of the task, and the ladder goes on from there. No keeps the model, and three more failing checks stop the work. A ticket's sub-agent cannot ask you, so it climbs no further than Opus 5.5.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/JakkapatB/open-effort/main/docs/images/states.png" width="760" alt="The band in each state: scored, a failing check, a climb, Fable 5.1, and stopped at the top">
@@ -160,7 +162,7 @@ The mod never picks `max` by itself.
 - Claude moves the flow from stage to stage with the `stage` tool. A stage's skill Claude uses on its own (a review of its own work during implement) only raises the effort: it does not move the flow.
 - Work you choose to do directly keeps the same care: when Claude uses one of the flow's skills on it (code-review, tdd), the task keeps at least that stage's effort and, while the Main Flow is on, moves to the flow's model, for the rest of the task. The band shows it as "Matt's skill · direct".
 - If you turn the flow or a stronger model down, you are not asked again this session for work no larger, or for a model no more capable.
-- Fable 5.1, once a climb reaches it in the flow, lasts until the next stage or ticket.
+- A model a climb moved to in the flow, Fable 5.1 included, lasts until the next stage or ticket.
 - The flow runs on **Opus 5.5** by default. Pick **Fable 5.1** or **the session's model** in the pane.
 - Each ticket can set its own `Model:` and `Effort:`. A sub-agent given a ticket uses the model and effort the ticket sets.
 - Needs [Matt Pocock's skills](https://github.com/mattpocock/skills). The pane says which are missing.
@@ -205,7 +207,8 @@ A general-purpose sub-agent's effort follows the stage it runs in: the code-revi
 | **Your session's model** (the one you picked with `/model`) | Everything, unless a row below says otherwise |
 | **A stronger model Haiku suggests** | The whole task, only if you say yes when Claude asks at the start |
 | **Opus 5.5** | The whole Main Flow (change it in the pane), and direct work once Claude uses one of the flow's skills on it. A session already on a stronger model keeps it |
-| **Fable 5.1** | After the effort goes past `xhigh` and checks still fail; in the Main Flow if you pick it; for a ticket that says `Model: fable`; a ticket's sub-agent that climbs that far |
+| **One model up** (Sonnet → Opus → Fable 5.1) | When checks keep failing at the top effort of the task's model, and you say yes when Claude asks; for the rest of the task (in a flow, to the next stage or ticket) |
+| **Fable 5.1** | One model up from Opus, with your yes; in the Main Flow if you pick it; for a ticket that says `Model: fable` |
 | **Haiku** | Reading each new request and each ticket without `Model:` and `Effort:` lines; Explore sub-agents; tickets that say `Model: haiku` |
 | **A ticket's `Model:`** | The sub-agent that works that ticket. When Claude works a ticket itself, it keeps the task's model |
 
@@ -213,8 +216,8 @@ A general-purpose sub-agent's effort follows the stage it runs in: the code-revi
 |---|---|
 | `low` | You know what to do and how; Explore sub-agents; Haiku's own reading |
 | `medium` | A known goal whose way needs thought; the lowest for risky work or when Haiku is unsure; the tickets and retro stages |
-| `high` | The plan is not clear yet; the grill, spec and implement stages; Plan sub-agents; the first step on Fable 5.1 |
-| `xhigh` | Unusually hard work; the review stage; the highest a sub-agent climbs to (one working a ticket then moves a model up) |
+| `high` | The plan is not clear yet; the grill, spec and implement stages; Plan sub-agents; the first step on a model a climb moved to |
+| `xhigh` | Unusually hard work; the review stage; the highest a sub-agent climbs to (one working a ticket then moves a model up, as far as Opus 5.5) |
 | `max` | On Fable 5.1, after `high` and `xhigh` there still fail; for a sub-agent on a model with no `xhigh` (Opus or Sonnet 4.6), in its place; or when you set your session to `max` yourself. The mod never picks it at the start |
 
 Three failing checks in a row raise the effort one level; a passing check brings it back to where the task started. A ticket's `Effort:` overrides the stage's effort for that ticket.
@@ -242,7 +245,7 @@ Open it with `/open-effort` or the band's **≡**.
 
 ### One model per task
 
-A task keeps one model from start to end, so the prompt cache holds. It changes only when you agree to a stronger model at the start, when it enters the Main Flow, when Claude uses one of the flow's skills on work you do directly, or when the effort goes past `xhigh` and it switches to Fable 5.1. It never switches to a weaker model by itself, and moves to a stronger one you were offered only after Claude asked you.
+A task keeps one model from start to end, so the prompt cache holds. It changes only when you agree to a stronger model at the start, when it enters the Main Flow, when Claude uses one of the flow's skills on work you do directly, or when its checks keep failing at the top effort and you agree to move it up one model. It never switches to a weaker model by itself, and moves to a stronger one you were offered only after Claude asked you.
 
 ### Models and effort
 
