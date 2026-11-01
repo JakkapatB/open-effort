@@ -4,6 +4,8 @@ All notable changes to this project. Dates are in UTC.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-01
+
 - A project can use its own flow instead of Matt Pocock's Main Flow: `.claude/open-effort.json` names its stages, the
   skills that run each, the effort each starts at, and where its tickets are written, worked and kept. `/open-effort
   flow` has Claude ask you about your flow and write the file. A file with a problem keeps the flow off, and the pane
@@ -12,6 +14,10 @@ All notable changes to this project. Dates are in UTC.
 - Meets the plugin directory's checks: the Haiku call lives in the hooks module's main file, and a ticket's sub-agent
   is linked at its first turn's start or from the Agent call's answer, with no `agent.spawn` hook.
 - The README says what each hook does and changes, and what the mod sends where.
+- The README shows how to install: one shell line, inside Claude Code in the terminal, or step by step in the desktop
+  app, with a picture of all three; and a Try it section with example prompts.
+- plugin.json links to the documentation, support and privacy sections.
+- A code of conduct.
 
 ## [0.1.0] - 2026-11-01
 
