@@ -22,3 +22,29 @@ jobs:
         run: claude plugin validate .
       - name: Run the tests
         run: claude plugin test .
+      - name: Check plugin.json and package.json name the same version
+        run: node scripts/sync-plugin-version.mjs --check
+
+  # A change to what users install needs a changeset, or no new version reaches them.
+  changeset:
+    if: github.event_name == 'pull_request' && !startsWith(github.head_ref, 'changeset-release/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Require a changeset when the plugin changes
+        env:
+          BASE: origin/${{ github.base_ref }}
+        run: |
+          changed=$(git diff --name-only "$BASE"...HEAD)
+          if ! printf '%s\n' "$changed" | grep -Eq '^(hooks/|types/|\.claude-plugin/plugin\.json$)'; then
+            echo "No change to hooks/, types/ or plugin.json: no changeset needed."
+            exit 0
+          fi
+          added=$(git diff --name-only --diff-filter=A "$BASE"...HEAD -- '.changeset/*.md' | grep -v '^\.changeset/README\.md$' || true)
+          if [ -z "$added" ]; then
+            echo "::error::This pull request changes the plugin but adds no changeset, so no new version would reach users. Run \`npx changeset\` and commit the file it writes."
+            exit 1
+          fi
+          echo "Changeset: $added"

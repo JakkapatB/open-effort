@@ -10,7 +10,8 @@ Thanks for helping. Bug reports, ideas and pull requests are all welcome.
 
 ## Set up
 
-You need [Claude Code](https://claude.com/claude-code) 2.1.308 or later. No other dependencies.
+You need [Claude Code](https://claude.com/claude-code) 2.1.308 or later. The plugin has no dependencies; the release
+tooling (`package.json`, changesets) needs Node.js 22 and `npm install`, and only to add a changeset.
 
 ```bash
 git clone https://github.com/JakkapatB/open-effort.git
@@ -29,6 +30,16 @@ To try your copy in a real session, load it as a dev mod from Claude Code, or in
 - **Both READMEs.** If the change is visible to users, update `README.md` and `README.th.md` together, in plain words.
 - **Keep it small.** One change per pull request.
 - **Checks pass.** `claude plugin test .` and `claude plugin validate .` both pass before you open the pull request.
+- **A changeset for users.** A change to `hooks/`, `types/` or `.claude-plugin/plugin.json` comes with a changeset: run
+  `npx changeset`, pick patch (a fix), minor (a feature) or major (a breaking change), and write one line for users.
+  CI fails without one, because without a new version installed copies never get the change. Docs need none.
+
+## Releases
+
+Nobody edits version numbers by hand. When changesets reach `main`, the Release workflow opens a pull request titled
+**chore: release** that raises the version in `package.json` and `.claude-plugin/plugin.json` (Claude Code reads the
+second to tell an update) and writes the notes into `CHANGELOG.md`. Merging it tags `vX.Y.Z` and publishes the GitHub
+release.
 
 ## Commit messages
 
@@ -50,11 +61,13 @@ Kinds: `feat`, `fix`, `perf`, `refactor`, `test`, `docs`, `chore`. Add detail in
 | `hooks/policy.ts` | effort, the ladder, models, sub-agents, tickets |
 | `hooks/score.ts` | the Haiku reading |
 | `hooks/checks.ts` | which commands count as checks |
-| `hooks/main-flow.ts` | Main Flow stages and the notes sent to Claude |
+| `hooks/flow.ts` | the flow: Matt's Main Flow, a project's own file, its skills and tickets |
+| `hooks/main-flow.ts` | the notes and tools sent to Claude for the flow |
 | `hooks/diagrams.ts` | the band, chart and themes as SVG |
 | `hooks/words.ts` | English and Thai text |
 | `types/index.d.ts` | the mod's state contract |
 | `tests/` | tests that drive the mod at its hooks |
+| `.changeset/`, `package.json`, `scripts/` | release tooling: changesets and the version sync |
 
 ## Licence
 

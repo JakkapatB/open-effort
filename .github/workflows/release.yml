@@ -1,0 +1,35 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+concurrency: ${{ github.workflow }}-${{ github.ref }}
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      # The whole history and its tags: a version already tagged is not tagged again.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install the release tooling
+        run: npm install --no-audit --no-fund
+      # Changesets on main: open or refresh the "chore: release" pull request that raises the version.
+      # None left: tag the version in package.json if it is new, and publish its GitHub release.
+      - uses: changesets/action@v1
+        with:
+          version: npm run version
+          publish: npx changeset tag
+          commit: 'chore: release'
+          title: 'chore: release'
+          createGithubReleases: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
