@@ -76,9 +76,9 @@ claude plugin marketplace add JakkapatB/open-effort && claude plugin install ope
 
 ### อัปเดตให้เป็นรุ่นล่าสุด
 
-Claude Code อัปเดต plugin ให้เองเฉพาะที่มาจาก marketplace ของ Anthropic เท่านั้น open-effort จึงอยู่ที่เวอร์ชันที่ติดตั้งไว้ จนกว่าคุณจะอัปเดตเอง หรือเปิดอัปเดตอัตโนมัติ
+Claude Code อัปเดต plugin ให้เองเฉพาะที่มาจาก marketplace ของ Anthropic และในแอป desktop ปิดการอัปเดตอัตโนมัติไว้ทุก marketplace open-effort จึงบอกคุณเอง: วันละครั้งจะเช็คว่ามีเวอร์ชันใหม่ไหม ถ้ามี ปุ่ม **≡** บนแถบจะขึ้นเป็น **≡ ●** และบนสุดของ pane จะมีปุ่ม **อัปเดตเลย** ซึ่งเรียกการอัปเดตของ Claude Code เอง เสร็จแล้วกด **Reload เลย** เพื่อใช้เวอร์ชันใหม่ใน session นี้ หรือเปิด session ใหม่ก็ได้ ถ้าเครื่องไหนอัปเดตจาก pane ไม่ได้ pane จะแสดงคำสั่งให้รันเองแทน หัวข้อ **อัปเดต** ใน pane มีปุ่ม **เช็คตอนนี้** และสวิตช์เปิดปิดการเช็ควันละครั้ง
 
-**เปิดอัปเดตอัตโนมัติ (ทำครั้งเดียว):** ใน Claude Code ใน terminal พิมพ์ `/plugin` เปิดแท็บ **Marketplaces** เลือก **open-effort** แล้วเลือก **Enable auto-update** หรือเพิ่มส่วนนี้ลงใน `~/.claude/settings.json` (ถ้ามี `extraKnownMarketplaces` อยู่แล้ว ให้ใส่ไว้ข้างในนั้น)
+**หรือเปิดอัปเดตอัตโนมัติของ Claude Code เอง (ทำครั้งเดียว ใช้ได้เฉพาะ terminal):** ใน Claude Code ใน terminal พิมพ์ `/plugin` เปิดแท็บ **Marketplaces** เลือก **open-effort** แล้วเลือก **Enable auto-update** หรือเพิ่มส่วนนี้ลงใน `~/.claude/settings.json` (ถ้ามี `extraKnownMarketplaces` อยู่แล้ว ให้ใส่ไว้ข้างในนั้น)
 
 ```json
 "extraKnownMarketplaces": {
@@ -91,8 +91,9 @@ Claude Code อัปเดต plugin ให้เองเฉพาะที่
 
 หลังจากนั้น พอเปิด session ไปได้สักครู่ Claude Code จะดึงเวอร์ชันใหม่มาให้ถ้ามี และ session ถัดไปจะใช้เวอร์ชันนั้น
 
-**อัปเดตตอนนี้เลย:**
+**หรืออัปเดตเอง:**
 
+- **pane:** หัวข้อ **อัปเดต** → **เช็คตอนนี้** แล้วกด **อัปเดตเลย**
 - **แอป desktop:** **Settings** → **Customize** → **Plugins** → **Open effort** → **Update** ถ้าปุ่มเป็นสีเทากดไม่ได้ ให้ใช้คำสั่งใน shell ด้านล่าง
 - **shell:**
 
@@ -260,7 +261,8 @@ effort ของ sub-agent แบบ general-purpose จะเท่ากับ
 
 - ข้อมูลทั้งหมดเก็บไว้ในเครื่องคุณ ใน plugin store ของ Claude Code
 - ประวัติไม่ได้เก็บข้อความที่คุณพิมพ์ เก็บแค่เวลา, effort, ผลประเมิน, จำนวนครั้ง และชื่อโมเดล
-- **ส่งอะไรออกไป และส่งไปที่ไหน:** mod ไม่ได้ติดต่อ server ใดๆ เอง ส่งข้อความไปที่เดียวคือโมเดล Haiku ของ Claude ผ่านช่องทางเรียกโมเดลของ Claude Code เอง (`$.model.complete`) ด้วยบัญชีของคุณ เหมือน request อื่นๆ ของ Claude Code สิ่งที่ส่งมี
+- **การเช็คอัปเดต:** วันละครั้งต่อเครื่อง และทุกครั้งที่คุณกด **เช็คตอนนี้** mod จะอ่านเลขเวอร์ชันล่าสุด โดยส่งคำขอ HTTPS หนึ่งครั้งผ่าน Claude Code ไปดึงไฟล์ `.claude-plugin/plugin.json` ของโปรเจกต์นี้จาก raw.githubusercontent.com ในคำขอไม่มีข้อมูลของคุณหรืองานของคุณ GitHub เห็นคำขอนี้เหมือนการเปิดหน้าเว็บทั่วไป ปิดการเช็ควันละครั้งได้ที่หัวข้อ **อัปเดต** ใน pane ส่วน **อัปเดตเลย** จะรันการอัปเดต plugin ของ Claude Code เอง (`claude plugin marketplace update open-effort` แล้ว `claude plugin update open-effort@open-effort`) และ **Reload เลย** จะรัน `/reload-plugins` ทั้งสองอย่างทำงานเฉพาะเมื่อคุณกดเท่านั้น
+- **ส่งอะไรออกไป และส่งไปที่ไหน:** นอกจากการเช็คอัปเดต mod ไม่ได้ติดต่อ server ใดๆ เอง ส่งข้อความไปที่เดียวคือโมเดล Haiku ของ Claude ผ่านช่องทางเรียกโมเดลของ Claude Code เอง (`$.model.complete`) ด้วยบัญชีของคุณ เหมือน request อื่นๆ ของ Claude Code สิ่งที่ส่งมี
   - ข้อความงานใหม่ที่คุณพิมพ์ และ 800 ตัวอักษรท้ายสุดของข้อความล่าสุดของ Claude ตอนที่มีงานค้างอยู่ เพื่อประเมินว่างานยากแค่ไหน
   - เนื้อหาไฟล์ ticket ที่ไม่ได้ระบุ `Model:` และ `Effort:` เพื่อประเมินแบบเดียวกัน
 - **ข้อความแนะนำถึง Claude:** mod เพิ่มข้อความสั้นๆ ให้ Claude ในแชท (`$.session.append` และ context แนบกับ prompt ของคุณ) เช่น ให้ถามคุณเรื่องโมเดลที่เก่งกว่าหรือ flow, วิธีเขียนโมเดลและ effort ใน ticket และเมื่อไรควรหยุดถามคุณ ข้อความเหล่านี้ส่งไปถึง Claude พร้อมบทสนทนา เหมือนข้อความของคุณ ส่วนคำสั่ง `/open-effort flow` จะส่ง prompt ของตัวเองหนึ่งข้อความให้ Claude (`$.prompt.submit`) เพื่อให้ช่วยเขียนไฟล์ flow โดยในข้อความมีชื่อ skill และคำสั่งที่คุณติดตั้งไว้
@@ -277,7 +279,7 @@ effort ของ sub-agent แบบ general-purpose จะเท่ากับ
 | `tool.call` ที่ `Bash` | นับ test, lint, build และ typecheck ว่าผ่านหรือไม่ผ่าน | ไม่เปลี่ยนอะไร |
 | `tool.call` ที่ `Read`, `Skill`, `Edit`, `Write` | สังเกตว่ามีการใช้ skill ของขั้นตอนไหน อ่าน ticket ไหน หรือเขียน test | ไม่เปลี่ยนอะไร |
 | `tool.call` ที่ `mcp__open-effort__stage`, `__model`, `__report` | ตอบ tool 3 ตัวของ mod เอง | เป็น tool ของ mod เอง |
-| `turn.start`, `turn.complete`, `session.start`, `session.end` | ติดตาม sub-agent ที่ทำงานอยู่ บันทึกประวัติของแต่ละ turn และโหลดสวิตช์ของโปรเจกต์ | ไม่เปลี่ยนอะไร |
+| `turn.start`, `turn.complete`, `session.start`, `session.end` | ติดตาม sub-agent ที่ทำงานอยู่ บันทึกประวัติของแต่ละ turn โหลดสวิตช์ของโปรเจกต์ และตอนเปิด session เช็คอัปเดตวันละครั้ง | ไม่เปลี่ยนอะไร |
 | `command.run` ที่ `open-effort` | ตอบคำสั่ง `/open-effort` ของ mod เอง: เปิด pane, เปิดปิด mod หรือถ้าพิมพ์ `flow` จะส่ง prompt ให้ Claude ช่วยเขียนไฟล์ flow | เป็นคำสั่งของ mod เอง ส่วน `flow` จะเริ่ม turn ใหม่ของตัวเอง |
 | `ui.render` | วาดแถบเหนือช่องแชทและ pane | เพิ่มแถบและ pane |
 

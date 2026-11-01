@@ -85,6 +85,27 @@ export type PaneWords = {
   flowHint: string
   missing: (skills: readonly string[]) => string
   install: string
+  updates: string
+  installed: (version: string) => string
+  check: string
+  checking: string
+  upToDate: (version: string) => string
+  newerOut: (version: string) => string
+  /** The header card when a newer version is out: the newest, and the one installed. */
+  newVersion: (latest: string, current: string) => string
+  whatChanged: string
+  updateNow: string
+  updating: string
+  updated: (version: string) => string
+  reload: string
+  reloadNote: string
+  updateFailed: (reason: string) => string
+  cannotRun: string
+  runThis: string
+  notChecked: string
+  unreached: string
+  daily: string
+  dailyNote: string
   language: string
   auto: string
   theme: string
@@ -232,6 +253,26 @@ const EN: Words = {
     flowHint: 'Type /open-effort flow to have Claude write your own.',
     missing: skills => `Missing skills: ${skills.join(', ')}`,
     install: 'Install them from a terminal, then reload plugins:',
+    updates: 'Updates',
+    installed: v => `Installed: ${v}`,
+    check: 'Check now',
+    checking: 'checking…',
+    upToDate: v => `${v} is the newest`,
+    newerOut: v => `${v} is out`,
+    newVersion: (latest, current) => `${latest} is out · you have ${current}`,
+    whatChanged: 'What changed:',
+    updateNow: 'Update now',
+    updating: 'updating…',
+    updated: v => `Updated to ${v}.`,
+    reload: 'Reload now',
+    reloadNote: 'Reload runs the new version in this session, and may start the prompt cache afresh. A new session runs it too.',
+    updateFailed: reason => `The update did not finish: ${reason}`,
+    cannotRun: 'Claude Code could not be run from here',
+    runThis: 'Run this in a terminal instead:',
+    notChecked: 'Not checked yet',
+    unreached: "Couldn't reach GitHub just now",
+    daily: 'Check for updates daily',
+    dailyNote: 'Once a day the mod reads the newest version number from GitHub. Nothing about your work is sent.',
     language: 'Language',
     theme: 'Theme',
     flowModel: 'Model for the flow',
@@ -299,6 +340,26 @@ const TH: Words = {
     flowHint: 'พิมพ์ /open-effort flow ให้ Claude ช่วยเขียน flow ของคุณเอง',
     missing: skills => `ยังไม่มี skill: ${skills.join(', ')}`,
     install: 'ติดตั้งจาก terminal แล้ว reload plugins:',
+    updates: 'อัปเดต',
+    installed: v => `ที่ติดตั้งอยู่: ${v}`,
+    check: 'เช็คตอนนี้',
+    checking: 'กำลังเช็ค…',
+    upToDate: v => `${v} เป็นเวอร์ชันล่าสุดแล้ว`,
+    newerOut: v => `มี ${v} แล้ว`,
+    newVersion: (latest, current) => `มี ${latest} แล้ว · ที่ติดตั้งอยู่ ${current}`,
+    whatChanged: 'เปลี่ยนอะไรบ้าง:',
+    updateNow: 'อัปเดตเลย',
+    updating: 'กำลังอัปเดต…',
+    updated: v => `อัปเดตเป็น ${v} แล้ว`,
+    reload: 'Reload เลย',
+    reloadNote: 'Reload จะใช้เวอร์ชันใหม่ใน session นี้ทันที และอาจทำให้ prompt cache เริ่มใหม่ ถ้าเปิด session ใหม่ก็ได้เวอร์ชันใหม่เหมือนกัน',
+    updateFailed: reason => `อัปเดตไม่สำเร็จ: ${reason}`,
+    cannotRun: 'เรียก Claude Code จากตรงนี้ไม่ได้',
+    runThis: 'ให้รันคำสั่งนี้ใน terminal แทน:',
+    notChecked: 'ยังไม่ได้เช็ค',
+    unreached: 'ติดต่อ GitHub ไม่ได้ในตอนนี้',
+    daily: 'เช็คอัปเดตวันละครั้ง',
+    dailyNote: 'วันละครั้ง mod จะอ่านเลขเวอร์ชันล่าสุดจาก GitHub โดยไม่ส่งข้อมูลงานของคุณออกไป',
     language: 'ภาษา',
     theme: 'ธีมสี',
     flowModel: 'โมเดลของ flow',

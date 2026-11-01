@@ -129,6 +129,20 @@ export type LanguageChoice = 'auto' | Language
  */
 export type Switches = { machine: boolean; project: boolean | null; flowMachine: boolean; flowProject: boolean | null }
 
+/**
+ * Updates of the mod itself: whether it reads the newest version daily, the installed and newest versions, and the
+ * step the pane is at (a check or an update running, an update done or failed, with why).
+ */
+export type UpdateState = {
+  isDaily: boolean
+  current: string | null
+  latest: string | null
+  step: 'idle' | 'checking' | 'updating' | 'updated' | 'failed'
+  /** Whether the last check the person pressed could not reach GitHub. */
+  isUnreached: boolean
+  reason: string | null
+}
+
 /** The project the session works in: its repository's root (or the folder), and the root's last part. */
 export type Project = { root: string; name: string }
 
@@ -203,6 +217,8 @@ declare module 'claude-code' {
       missing: string[]
       /** The flow the project uses: its own file's, or Matt Pocock's Main Flow. */
       flow: FlowState
+      /** Updates of the mod itself. */
+      updates: UpdateState
       turnLog: TurnLog
       /** The effort the main session's last request carried, before the mod changed it; null until one is seen. */
       sessionEffort: Effort | null
