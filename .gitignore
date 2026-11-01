@@ -1,3 +1,5 @@
 .DS_Store
 node_modules/
 .claude-plugin/types/
+# Release tooling installs here and in CI; not committed, so Claude Code installs nothing into the plugin for its users.
+package-lock.json

@@ -51,7 +51,7 @@ Pick one of the three ways:
 
 ### 1. In a shell
 
-One line, for Claude Code in the terminal and the desktop app alike:
+One line. It needs Claude Code's command-line tool, `claude`, in your shell. With only the desktop app installed, your shell has no `claude`: use way 3.
 
 ```bash
 claude plugin marketplace add JakkapatB/open-effort && claude plugin install open-effort@open-effort
@@ -74,6 +74,34 @@ claude plugin marketplace add JakkapatB/open-effort && claude plugin install ope
 In the desktop app, typing `/plugin install …` only searches Anthropic's plugin directory, where open-effort is not listed.
 
 Nothing to set up: start a new session and the band appears above the prompt.
+
+### Keep it up to date
+
+Claude Code updates plugins by itself only from Anthropic's own marketplaces, so open-effort stays at the version you installed until you update it or turn on auto-update.
+
+**Turn on auto-update, once.** In Claude Code in the terminal, run `/plugin`, open **Marketplaces**, pick **open-effort** and choose **Enable auto-update**. Or add this entry inside `~/.claude/settings.json` (next to any `extraKnownMarketplaces` entries already there):
+
+```json
+"extraKnownMarketplaces": {
+  "open-effort": {
+    "source": { "source": "github", "repo": "JakkapatB/open-effort" },
+    "autoUpdate": true
+  }
+}
+```
+
+From then on, a few minutes into a session Claude Code fetches a new version if there is one, and the next session runs it.
+
+**Update now.**
+
+- **Desktop app:** **Settings** → **Customize** → **Plugins** → **Open effort** → **Update**. If the button stays grey, use the shell line below.
+- **Shell:**
+
+  ```bash
+  claude plugin marketplace update open-effort && claude plugin update open-effort@open-effort
+  ```
+
+Then start a new session. What each version changes is in the [CHANGELOG](CHANGELOG.md) and on the [Releases](https://github.com/JakkapatB/open-effort/releases) page; on GitHub, **Watch** → **Custom** → **Releases** tells you when a new one comes out.
 
 ## Try it
 

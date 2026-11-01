@@ -50,7 +50,7 @@
 
 ### 1. ใน shell
 
-คำสั่งเดียว ใช้ได้ทั้ง Claude Code ใน terminal และในแอป desktop:
+คำสั่งเดียว ต้องมีคำสั่ง `claude` (Claude Code แบบ command line) ใน shell ก่อน ถ้าติดตั้งแค่แอป desktop จะไม่มีคำสั่งนี้ ให้ใช้วิธีที่ 3 แทน
 
 ```bash
 claude plugin marketplace add JakkapatB/open-effort && claude plugin install open-effort@open-effort
@@ -73,6 +73,34 @@ claude plugin marketplace add JakkapatB/open-effort && claude plugin install ope
 ในแอป desktop การพิมพ์ `/plugin install …` จะค้นหาแค่ใน plugin directory ของ Anthropic ซึ่งไม่มี open-effort
 
 ไม่ต้องตั้งค่าเพิ่ม เปิด session ใหม่แล้วแถบจะขึ้นเหนือช่องแชทเอง
+
+### อัปเดตให้เป็นรุ่นล่าสุด
+
+Claude Code อัปเดต plugin ให้เองเฉพาะที่มาจาก marketplace ของ Anthropic เท่านั้น open-effort จึงอยู่ที่เวอร์ชันที่ติดตั้งไว้ จนกว่าคุณจะอัปเดตเอง หรือเปิดอัปเดตอัตโนมัติ
+
+**เปิดอัปเดตอัตโนมัติ (ทำครั้งเดียว):** ใน Claude Code ใน terminal พิมพ์ `/plugin` เปิดแท็บ **Marketplaces** เลือก **open-effort** แล้วเลือก **Enable auto-update** หรือเพิ่มส่วนนี้ลงใน `~/.claude/settings.json` (ถ้ามี `extraKnownMarketplaces` อยู่แล้ว ให้ใส่ไว้ข้างในนั้น)
+
+```json
+"extraKnownMarketplaces": {
+  "open-effort": {
+    "source": { "source": "github", "repo": "JakkapatB/open-effort" },
+    "autoUpdate": true
+  }
+}
+```
+
+หลังจากนั้น พอเปิด session ไปได้สักครู่ Claude Code จะดึงเวอร์ชันใหม่มาให้ถ้ามี และ session ถัดไปจะใช้เวอร์ชันนั้น
+
+**อัปเดตตอนนี้เลย:**
+
+- **แอป desktop:** **Settings** → **Customize** → **Plugins** → **Open effort** → **Update** ถ้าปุ่มเป็นสีเทากดไม่ได้ ให้ใช้คำสั่งใน shell ด้านล่าง
+- **shell:**
+
+  ```bash
+  claude plugin marketplace update open-effort && claude plugin update open-effort@open-effort
+  ```
+
+จากนั้นเปิด session ใหม่ ดูว่าแต่ละเวอร์ชันเปลี่ยนอะไรได้ที่ [CHANGELOG](CHANGELOG.md) และหน้า [Releases](https://github.com/JakkapatB/open-effort/releases) ถ้าอยากรู้ทันทีที่มีเวอร์ชันใหม่ ให้กด **Watch** → **Custom** → **Releases** บน GitHub
 
 ## ลองใช้
 

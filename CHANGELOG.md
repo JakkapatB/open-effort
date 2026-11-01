@@ -1,10 +1,6 @@
 # Changelog
 
-All notable changes to this project. Dates are in UTC.
-
-## [Unreleased]
-
-## [0.2.0] - 2026-11-01
+## 0.2.0
 
 - A project can use its own flow instead of Matt Pocock's Main Flow: `.claude/open-effort.json` names its stages, the
   skills that run each, the effort each starts at, and where its tickets are written, worked and kept. `/open-effort
@@ -19,7 +15,7 @@ All notable changes to this project. Dates are in UTC.
 - plugin.json links to the documentation, support and privacy sections.
 - A code of conduct.
 
-## [0.1.0] - 2026-11-01
+## 0.1.0
 
 The first release.
 
