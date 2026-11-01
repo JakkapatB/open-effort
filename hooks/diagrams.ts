@@ -1,5 +1,4 @@
 import type { HistoryEntry, Stage, Task } from '../types'
-import { STAGES } from './main-flow'
 import { EFFORTS, isFable } from './policy'
 import { clockTime, modelName } from './words'
 
@@ -318,15 +317,15 @@ export function agentsSvg(from: number, width: number, said: string, isNew: bool
 }
 
 /**
- * The Main Flow's stages as small pills on a dashed line: those done with a tick, the one in progress lit. Narrow
- * bands show only the stages around the one in progress.
+ * A flow's stages, `stages` in order, as small pills on a dashed line: those done with a tick, the one in progress lit.
+ * Narrow bands show only the stages around the one in progress.
  */
-export function stageSvg(stage: Stage, maxWidth: number, fresh: { isTrackNew: boolean; isStageNew: boolean } = { isTrackNew: true, isStageNew: true }): Drawing {
-  const at = STAGES.indexOf(stage)
+export function stageSvg(stages: readonly Stage[], stage: Stage, maxWidth: number, fresh: { isTrackNew: boolean; isStageNew: boolean } = { isTrackNew: true, isStageNew: true }): Drawing {
+  const at = stages.indexOf(stage)
   const widthOf = (name: string) => textWidth(name, 10) + 30
   let first = 0
-  let last = STAGES.length - 1
-  const span = () => STAGES.slice(first, last + 1).reduce((sum, s) => sum + widthOf(s), 0) + (last - first) * 18 + 4
+  let last = stages.length - 1
+  const span = () => stages.slice(first, last + 1).reduce((sum, s) => sum + widthOf(s), 0) + (last - first) * 18 + 4
   while (span() > maxWidth && last - first > 0) {
     if (at - first >= last - at) first += 1
     else last -= 1
@@ -336,7 +335,7 @@ export function stageSvg(stage: Stage, maxWidth: number, fresh: { isTrackNew: bo
   const grow = Math.max(0, (maxWidth - span()) / shown)
   let x = 2
   const parts: string[] = []
-  STAGES.slice(first, last + 1).forEach((name, k) => {
+  stages.slice(first, last + 1).forEach((name, k) => {
     const i = first + k
     const w = widthOf(name) + grow
     // The whole track pops in when it first shows; after that only the stage just started does.

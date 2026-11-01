@@ -114,25 +114,15 @@ export const NEW_TASK: Omit<Task, 'score' | 'effort'> = {
 /** A task with no score yet: the session's own effort until something sets one. */
 export const FRESH_TASK: Task = { score: null, effort: null, ...NEW_TASK }
 
-/** The effort each Main Flow stage starts at. */
-export const STAGE_EFFORT: Readonly<Record<Stage, Effort>> = {
-  grill: 'high',
-  spec: 'high',
-  tickets: 'medium',
-  implement: 'high',
-  review: 'xhigh',
-  retro: 'medium',
-}
-
 /**
- * A task moved to a Main Flow stage: the stage's effort, with the last stage's climb left behind, Fable 5.1 a climb
+ * A task moved to a flow's stage: `effort`, the stage's, with the last stage's climb left behind, Fable 5.1 a climb
  * reached included (a flow that runs on Fable keeps it); its score stays.
  */
-export function enteredStage(task: Task, stage: Stage): Task {
+export function enteredStage(task: Task, stage: Stage, effort: Effort): Task {
   return {
     ...task,
     stage,
-    effort: STAGE_EFFORT[stage],
+    effort,
     climbed: null,
     isOnFable: isFable(task.model),
     fails: 0,
@@ -143,11 +133,11 @@ export function enteredStage(task: Task, stage: Stage): Task {
 }
 
 /**
- * Work done directly, outside the Main Flow, on which Claude used a stage's skill (code-review, tdd): the task keeps at
- * least that stage's effort from then on, a climb above it left in place, and moves to `model` when one is given.
+ * Work done directly, outside the flow, on which Claude used a stage's skill (code-review, tdd): the task keeps at
+ * least `floor`, that stage's effort, from then on, a climb above it left in place, and moves to `model` when one is
+ * given.
  */
-export function usedStageSkill(task: Task, stage: Stage, own: Effort | null, model: string | null): Task {
-  const floor = STAGE_EFFORT[stage]
+export function usedStageSkill(task: Task, stage: Stage, floor: Effort, own: Effort | null, model: string | null): Task {
   const effort = atLeast(task.effort ?? own ?? floor, floor)
   // A climb that stands below the new effort is left behind; one above it, or on Fable 5.1, stays.
   const isBelow = !!task.climbed && !task.climbed.isFable && EFFORTS.indexOf(task.climbed.effort) <= EFFORTS.indexOf(effort)
@@ -225,7 +215,7 @@ function effortAbove(here: Effort, top: Effort, model: string | null): Effort | 
 /**
  * What a sub-agent of a built-in type starts with: Explore on Haiku at low, Plan at high and general-purpose (the
  * type when none is named) at the main session's current effort. Plan and general-purpose run on the task's model:
- * `taskTier` is its family when it is not the session's (the Main Flow's Opus 5.5, an accepted offer, Fable 5.1), else
+ * `taskTier` is its family when it is not the session's (the flow's Opus 5.5, an accepted offer, Fable 5.1), else
  * null and the sub-agent keeps the session's. Any other type is the person's own and gets null: left as it is.
  */
 export function subAgentStart(type: string | undefined, main: Effort | null, taskTier: ModelTier | null = null): { model?: ModelTier; effort?: Effort } | null {
@@ -256,24 +246,6 @@ export function afterAgentCheck(agent: SubAgent, passed: boolean, model: string 
   return { ...agent, climbed: effortAbove(here, top, model) ?? agent.climbed, fails: 0 }
 }
 
-/** A ticket file as /to-tickets names one: `<feature>/issues/03-coupon-rules.md`; its number is `03`. */
-const TICKET_FILE = /\/issues\/(\d+)-[^/\s]+\.md$/
-
-/** The number of the ticket a path is; null for any other file. */
-export function ticketOf(path: string): string | null {
-  return TICKET_FILE.exec(path)?.[1] ?? null
-}
-
-/** The first ticket file a sub-agent's prompt names, as Claude hands one ticket to each; null for none. */
-export function ticketIn(prompt: string): string | null {
-  for (const word of prompt.split(/[\s'"`()[\]<>]+/)) {
-    // A path that ends a sentence or a clause: `…/03-rules.md.` or `…/03-rules.md,`.
-    const path = word.replace(/[.,;:!?]+$/, '')
-    if (TICKET_FILE.test(path)) return path
-  }
-  return null
-}
-
 /** The value of a ticket's first `<name>:` line (bold or a list bullet allowed), lower-cased; undefined for none. */
 function lineValue(text: string, name: string): string | undefined {
   const line = new RegExp(`^[ \\t]*(?:[-*+][ \\t]+)?(?:\\*\\*)?${name}(?:\\*\\*)?[ \\t]*:(.*)$`, 'i')
@@ -297,7 +269,7 @@ export function ticketLinesOf(text: string): Partial<TicketSetting> {
 }
 
 /**
- * The main session takes up a ticket in the implement stage: its effort, a fresh count of checks; the task's model
+ * The main session takes up a ticket in the stage that works tickets: its effort, a fresh count of checks; the task's model
  * stays, and Fable 5.1 a climb on the last ticket reached is left behind.
  */
 export function enteredTicket(task: Task, ticket: string, effort: Effort): Task {
@@ -321,12 +293,12 @@ export function afterTicketAgentCheck(agent: SubAgent, passed: boolean, startTie
   return up ? { ...agent, tier: up, climbed: 'high', fails: 0 } : { ...agent, fails: 0 }
 }
 
-/** The model the Main Flow runs on: the frontier model, Fable 5.1, or the session's own. */
+/** The model the flow runs on: the frontier model, Fable 5.1, or the session's own. */
 export type FlowModel = 'frontier' | 'fable' | 'session'
 
 export const FLOW_MODELS: readonly FlowModel[] = ['frontier', 'fable', 'session']
 
-/** Today's frontier model, the Main Flow's default: the strongest generally used model below Fable. */
+/** Today's frontier model, the flow's default: the strongest generally used model below Fable. */
 export const FRONTIER_MODEL = 'claude-opus-5-5'
 
 export function isFlowModel(value: unknown): value is FlowModel {
@@ -334,7 +306,7 @@ export function isFlowModel(value: unknown): value is FlowModel {
 }
 
 /**
- * The model a task moves to as it enters the Main Flow: the one picked for the flow, when it is above the model the
+ * The model a task moves to as it enters the flow: the one picked for the flow, when it is above the model the
  * task runs on; null to keep it (the session's own picked, or the task already on as capable a model).
  */
 export function flowModelFor(pick: FlowModel, runsOn: string | null): string | null {

@@ -68,6 +68,8 @@ export type EngineOptions = {
   root?: string
   /** Files the mod may read, by path, as `$.fs.read` finds them. */
   files?: Record<string, string>
+  /** The person's own skills and other plugins' among the session's commands: a name, and the plugin it comes from. */
+  skills?: readonly { name: string; plugin?: string }[]
   /** Why the surface will not put an agent's transcript in view (the desktop app draws no main view); default it does. */
   viewDeny?: string
 }
@@ -144,12 +146,14 @@ export function engine(on: On, options: EngineOptions = {}) {
     store.delete(e.key)
     return { value: undefined }
   })
+  // The engine hands the path made absolute against the session's folder: a file is found by its ending.
+  const fileAt = (path: string) => Object.entries(options.files ?? {}).find(([known]) => path === known || path.endsWith(`/${known}`))?.[1]
   on('fs.read', (_, e) => {
-    // The engine hands the path made absolute against the session's folder: a file is found by its ending.
-    const text = Object.entries(options.files ?? {}).find(([path]) => e.path === path || e.path.endsWith(`/${path}`))?.[1]
+    const text = fileAt(e.path)
     if (text === undefined) throw new Error(`ENOENT: ${e.path}`)
     return { value: text }
   })
+  on('fs.exists', (_, e) => ({ value: fileAt(e.path) !== undefined }))
   on('command.register', () => ({ value: { command: 'open-effort' } }))
   on('tool.register', (_, e) => ({ value: { tool: `mcp__open-effort__${e.name}` } }))
   on('agent.list', () => ({ value: [...AGENTS] }))
@@ -157,6 +161,7 @@ export function engine(on: On, options: EngineOptions = {}) {
     value: [
       { name: 'code-review', description: "Claude Code's own review", source: 'builtin' as const },
       ...(options.matt ?? []).map(name => ({ name: `mattpocock-skills:${name}`, description: name, source: 'plugin' as const, plugin: 'mattpocock-skills' })),
+      ...(options.skills ?? []).map(s => ({ name: s.name, description: s.name, source: s.plugin ? ('plugin' as const) : ('user' as const), ...(s.plugin ? { plugin: s.plugin } : {}) })),
     ],
   }))
   on('settings.read', () => ({ value: options.settings ?? {} }))

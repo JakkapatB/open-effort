@@ -1,18 +1,18 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, PromptOrigin, Register, RenderChildren } from 'claude-code'
 
-import type { Declined, Effort, HistoryEntry, Language, LanguageChoice, ModelTier, Project, Stage, SubAgent, Switches, Task, TicketSetting, TurnLog } from '../types'
+import type { Declined, Effort, Flow, FlowState, HistoryEntry, Language, LanguageChoice, ModelTier, Project, Stage, SubAgent, Switches, Task, TicketSetting, TurnLog } from '../types'
 import { checkRun, isTestFile } from './checks'
 import { THEMES, THEME_IDS, agentsSvg, bandKeys, historySvg, isThemeId, stageSvg, stepsSvg, useTheme } from './diagrams'
 import type { Loop, Step, ThemeId } from './diagrams'
 import { EMPTY_TURN, appended, entryOf, historyFrom, historyKey, projectKey, projectOf } from './history'
 import {
-  ASK_NOTE, IMPLEMENT_NOTE, INSTALL_COMMANDS, MODEL_TOOL_SPEC, STAGES, STAGE_TOOL, STAGE_TOOL_SPEC, TICKET_NOTE, flowStartedNote, missingSkills, modelNote, routeOf, stageOfPath, stageOfSkill,
-  startsFlow,
-} from './main-flow'
+  FLOW_FILE, INSTALL_COMMANDS, MATT_FLOW, flowFrom, lastStage, missingSkills, stageEffort, stageOfPath, stageOfSkill, startsFlow, ticketIn, ticketOf,
+} from './flow'
+import { IMPLEMENT_NOTE, MODEL_TOOL_SPEC, STAGE_TOOL, STAGE_TOOL_SPEC, askNote, flowStartedNote, flowWriteNote, modelNote, routeOf, ticketNote } from './main-flow'
 import {
   EFFORTS, FABLE_MODEL, FAILS_TO_STALL, FLOW_MODELS, FRESH_TASK, TIER_MODEL, afterAgentCheck, afterCheck, afterTicketAgentCheck, enteredStage, enteredTicket,
-  fitEffort, flowModelFor, isBuiltInAgent, isEffort, isFable, isFlowModel, modelUp, rungOf, startingEffort, subAgentStart, supportedEfforts, taskModel, usedStageSkill, ticketIn, ticketOf,
+  fitEffort, flowModelFor, isBuiltInAgent, isEffort, isFable, isFlowModel, modelUp, rungOf, startingEffort, subAgentStart, supportedEfforts, taskModel, usedStageSkill,
   isSizeAtMost, isTierAtMost, largerSize, ticketLinesOf, tierOf,
 } from './policy'
 import type { FlowModel } from './policy'
@@ -27,6 +27,8 @@ const switches = atom(
   { machine: true, project: null, flowMachine: true, flowProject: null } as Switches,
 )
 const missing = atom({ plugin: 'open-effort', key: 'missing' } as const, [] as string[])
+// The flow the project uses: its own file's, or Matt Pocock's Main Flow; read again with each new task.
+const flowState = atom({ plugin: 'open-effort', key: 'flow' } as const, { flow: MATT_FLOW, file: null, problem: null } as FlowState)
 const project = atom({ plugin: 'open-effort', key: 'project' } as const, null as Project | null)
 const sessionEffort = atom({ plugin: 'open-effort', key: 'sessionEffort' } as const, null as Effort | null)
 const sessionModel = atom({ plugin: 'open-effort', key: 'sessionModel' } as const, null as string | null)
@@ -161,16 +163,44 @@ async function setSwitches($: EngineInterface, change: (s: Switches) => Switches
   else if (!(next.flowProject ?? next.flowMachine)) await endFlow($)
 }
 
-/** Whether the Main Flow can run: switched on (the project's switch over the machine's) and its skills installed. */
+/**
+ * Whether the flow can run: switched on (the project's switch over the machine's), its file usable when the project
+ * has one, and its skills installed.
+ */
 async function isFlowAvailable($: EngineInterface): Promise<boolean> {
   const s = await read($, switches)
-  return (s.flowProject ?? s.flowMachine) && (await read($, missing)).length === 0
+  return (s.flowProject ?? s.flowMachine) && (await read($, flowState)).problem === null && (await read($, missing)).length === 0
 }
 
-/** The Main Flow skills this session lacks, read again from its commands (a plugin installed meanwhile counts). */
+/** The flow in use. */
+async function flowOf($: EngineInterface): Promise<Flow> {
+  return (await read($, flowState)).flow
+}
+
+/** The flow's skills this session lacks, read again from its commands (a plugin installed meanwhile counts). */
 async function checkSkills($: EngineInterface): Promise<void> {
-  const lacking = missingSkills(await $.command.list())
+  const lacking = missingSkills(await flowOf($), await $.command.list())
   await update($, missing, () => lacking)
+}
+
+/**
+ * Reads the project's flow: its own file when it has one, else Matt Pocock's Main Flow. A file that cannot be used
+ * keeps the flow off, and the pane says why; Matt's stage skills still set their efforts on work done directly.
+ */
+async function loadFlow($: EngineInterface): Promise<void> {
+  const root = (await read($, project))?.root ?? (await $.session.root())
+  const path = `${root}/${FLOW_FILE}`
+  let state: FlowState = { flow: MATT_FLOW, file: null, problem: null }
+  try {
+    if (await $.fs.exists(path)) {
+      const parsed = flowFrom(await $.fs.read(path))
+      state = 'flow' in parsed ? { flow: parsed.flow, file: FLOW_FILE, problem: null } : { flow: MATT_FLOW, file: FLOW_FILE, problem: parsed.problem }
+    }
+  } catch {
+    state = { flow: MATT_FLOW, file: FLOW_FILE, problem: 'it could not be read' }
+  }
+  await update($, flowState, () => state)
+  await checkSkills($)
 }
 
 /** The Main Flow's model, picked in the pane and kept in the store. */
@@ -224,17 +254,20 @@ async function moveToStage($: EngineInterface, stage: Stage, by: StageMover): Pr
   const t = await read($, task)
   if (t.stage === stage) return true
   if (t.stage === null && by === 'tool' && !t.isFlowInvited && !(await isFlowInTranscript($))) return 'not-invited'
+  const flow = await flowOf($)
+  const effort = stageEffort(flow, stage)
+  if (!effort) return 'off'
   // Entering the flow moves the task to the model picked for it (the frontier model by default), never down.
   const moveTo = t.stage === null ? flowModelFor(await read($, flowModel), taskModel(t, await read($, sessionModel))) : null
   await setTask($, (current): Task => ({
-    ...enteredStage(current, stage),
+    ...enteredStage(current, stage, effort),
     ...(moveTo ? { model: moveTo, isOnFable: current.isOnFable || isFable(moveTo) } : {}),
   }))
   // A flow the person started with a stage's command: Claude learns how to move on in it and how to leave it.
   // The stages where tickets are written and worked tell Claude how a ticket's model and effort are named and used.
   const notes = [
-    ...(t.stage === null && by === 'person' ? [flowStartedNote(stage)] : []),
-    ...(stage === 'tickets' ? [TICKET_NOTE] : stage === 'implement' ? [IMPLEMENT_NOTE] : []),
+    ...(t.stage === null && by === 'person' ? [flowStartedNote(flow, stage)] : []),
+    ...(stage === flow.tickets?.write ? [ticketNote(flow)] : stage === flow.tickets?.work ? [IMPLEMENT_NOTE] : []),
   ]
   for (const note of notes) await $.session.append({ message: { type: 'user', content: [{ type: 'text', text: note }] } })
   return true
@@ -274,9 +307,11 @@ async function stageSign($: EngineInterface, agentId: string | undefined, stage:
   if (agentId !== undefined || !stage || !(await read($, isOn))) return
   const t = await read($, task)
   if (t.stage === stage) return
+  const floor = stageEffort(await flowOf($), stage)
+  if (!floor) return
   const moveTo = t.stage === null && (await isFlowAvailable($)) ? flowModelFor(await read($, flowModel), taskModel(t, await read($, sessionModel))) : null
   const own = await read($, sessionEffort)
-  await setTask($, current => usedStageSkill(current, stage, own, moveTo))
+  await setTask($, current => usedStageSkill(current, stage, floor, own, moveTo))
 }
 
 /** The Main Flow ended: the next request starts a new task. */
@@ -284,6 +319,9 @@ async function endFlow($: EngineInterface): Promise<void> {
   if ((await read($, task)).stage === null) return
   await setTask($, () => FRESH_TASK)
 }
+
+/** How long after `/open-effort flow` returns its prompt to Claude is submitted. */
+const FLOW_PROMPT_DELAY_MS = 50
 
 /** How long a band step counts as just appeared, and pops in when drawn. */
 const FRESH_MS = 1500
@@ -351,9 +389,10 @@ async function applyScore($: EngineInterface, scored: Scored, generation: number
   if (turnedDown) await update($, declined, d => ({ ...d, flow: largerSize(d.flow, turnedDown) }))
   // What happened while the score was on its way stays: a flow the person started, a stage's skill Claude used.
   const fresh: Task = { ...FRESH_TASK, score, effort: startingEffort(score) }
+  const floor = now.skill !== null ? stageEffort(await flowOf($), now.skill) : null
   const next =
     now.stage !== null && now.stage !== was.stage ? { ...now, score }
-    : now.skill !== null && now.skill !== was.skill ? usedStageSkill(fresh, now.skill, null, now.model !== was.model ? now.model : null)
+    : now.skill !== null && floor && now.skill !== was.skill ? usedStageSkill(fresh, now.skill, floor, null, now.model !== was.model ? now.model : null)
     : fresh
   await setTask($, () => next)
   if (next.stage !== null) return []
@@ -375,11 +414,13 @@ async function applyScore($: EngineInterface, scored: Scored, generation: number
     await setTask($, (t): Task => ({ ...t, modelOffer: offer }))
     notes.push(modelNote(modelName(TIER_MODEL[offer]), modelName(own)))
   }
-  await checkSkills($)
+  // A task that ends a flow in its last stage did not read the flow file as it started: the file may have changed.
+  if (was.stage !== null) await loadFlow($)
+  else await checkSkills($)
   const isAsked = routeOf(score.size, await isFlowAvailable($)) === 'ask' && !(said.flow && isSizeAtMost(score.size, said.flow))
   if (isAsked) {
     await setTask($, (t): Task => ({ ...t, isFlowInvited: true }))
-    notes.unshift(ASK_NOTE)
+    notes.unshift(askNote(await flowOf($)))
   }
   return notes
 }
@@ -450,12 +491,12 @@ export const register: Register = on => {
       await update($, flowModel, () => (isFlowModel(pickedFlowModel) ? pickedFlowModel : 'frontier'))
       const pickedTheme = await $.store.get(STORE_THEME)
       await update($, themeChoice, () => (isThemeId(pickedTheme) ? pickedTheme : 'claude'))
-      await checkSkills($)
+      await loadFlow($)
     } catch {
       // A store or setting that cannot be read leaves the defaults: on, English, no effort seen, no history.
     }
     try {
-      await $.command.register({ name: 'open-effort', description: wordsFor(await read($, language)).commandDescription })
+      await $.command.register({ name: 'open-effort', description: wordsFor(await read($, language)).commandDescription, argumentHint: 'on | off | flow' })
     } catch {
       // Without the command the band still opens the pane.
     }
@@ -487,6 +528,7 @@ export const register: Register = on => {
         isOn: await read($, isOn),
         switches: await read($, switches),
         missing: await read($, missing),
+        flow: await read($, flowState),
         task: await read($, task),
         sessionEffort: await read($, sessionEffort),
         sessionModel: await read($, sessionModel),
@@ -515,21 +557,22 @@ export const register: Register = on => {
     return { result: choice === 'up' ? `open-effort: this task now runs on ${modelName(model)}.` : "open-effort: this task stays on the session's model." }
   }).catch(() => ({ result: 'open-effort: the model was not set.' }))
 
-  // Claude announces the Main Flow stage it starts, or that the flow is done.
+  // Claude announces the flow stage it starts, or that the flow is done.
   on('tool.call', { tool: 'mcp__open-effort__stage' }, async ($, e) => {
     const named = (e as { stage?: unknown }).stage
     if (named === 'done') {
       await endFlow($)
-      return { result: 'open-effort: the Main Flow is done; the next request starts a new task.' }
+      return { result: 'open-effort: the flow is done; the next request starts a new task.' }
     }
-    const stage = STAGES.find(s => s === named)
-    if (!stage) return { result: `open-effort: the stage must be one of ${STAGES.join(', ')}, or done.` }
+    const names = (await flowOf($)).stages.map(s => s.name)
+    const stage = names.find(s => s === named)
+    if (!stage) return { result: `open-effort: the stage must be one of ${names.join(', ')}, or done.` }
     const moved = await moveToStage($, stage, 'tool')
     return {
       result:
         moved === true ? `open-effort: stage ${stage}; requests go out at its effort.`
-        : moved === 'off' ? 'open-effort: the Main Flow is off or its skills are missing, so the stage changes nothing.'
-        : 'open-effort: this task was not sent into the Main Flow, so the stage changes nothing.',
+        : moved === 'off' ? 'open-effort: the flow is off, its file has a problem, or its skills are missing, so the stage changes nothing.'
+        : 'open-effort: this task was not sent into the flow, so the stage changes nothing.',
     }
   }).catch(() => ({ result: 'open-effort: the stage was not set.' }))
 
@@ -537,17 +580,18 @@ export const register: Register = on => {
   on('tool.call', { tool: 'Skill' }, async ($, e, next) => {
     const ran = await next(e)
     // Only a skill that ran: one the engine refused (a user-invoked skill) starts no stage.
-    if (ran.deny === undefined && ran.isError !== true) await stageSign($, e.agentId, stageOfSkill(e.skill))
+    if (ran.deny === undefined && ran.isError !== true) await stageSign($, e.agentId, stageOfSkill(await flowOf($), e.skill))
     return ran
   }).catch(($, e, next) => next(e))
 
-  // Reading a stage skill's SKILL.md, as the Main Flow note asks, raises the task to its stage's effort.
+  // Reading a stage skill's SKILL.md, as the flow's note asks, raises the task to its stage's effort.
   on('tool.call', { tool: 'Read' }, async ($, e, next) => {
-    await stageSign($, e.agentId, stageOfPath(e.file_path))
-    // Claude reading a ticket in the implement stage takes it up: the ticket's effort, on the task's model.
-    const number = ticketOf(e.file_path)
+    const flow = await flowOf($)
+    await stageSign($, e.agentId, stageOfPath(flow, e.file_path))
+    // Claude reading a ticket in the stage that works them takes it up: the ticket's effort, on the task's model.
+    const number = ticketOf(flow, e.file_path)
     const t = await read($, task)
-    if (e.agentId === undefined && number && t.stage === 'implement' && t.ticket !== number && (await read($, isOn))) {
+    if (e.agentId === undefined && number && t.stage !== null && t.stage === flow.tickets?.work && t.ticket !== number && (await read($, isOn))) {
       const setting = await ticketSetting($, e.file_path)
       if (setting) await setTask($, (current): Task => enteredTicket(current, number, setting.effort))
     }
@@ -561,17 +605,20 @@ export const register: Register = on => {
   on('prompt.submit', async ($, e, next) => {
     // The session moved to another project (a host's directory change): its switches and history come with it.
     if ((await read($, project))?.root !== (await $.session.root())) await loadProject($)
-    // A stage command the person types starts its stage, and the flow with it (tdd only inside the flow).
-    const typed = e.command && isPerson(e.origin) ? stageOfSkill(e.command.name) : null
-    if (typed && e.command && (startsFlow(e.command.name) || (await read($, task)).stage !== null)) await moveToStage($, typed, 'person')
+    // The project's flow file is read again for each new task; a flow under way keeps the one it started with.
+    if ((await read($, task)).stage === null) await loadFlow($)
+    const flow = await flowOf($)
+    // A stage command the person types starts its stage, and the flow with it (Matt's tdd only inside the flow).
+    const typed = e.command && isPerson(e.origin) ? stageOfSkill(flow, e.command.name) : null
+    if (typed && e.command && (startsFlow(flow, e.command.name) || (await read($, task)).stage !== null)) await moveToStage($, typed, 'person')
     // A command typed with words after it (`/fix-bug the cart total`) asks for work like a prompt; one alone, or the
     // mod's own, or a stage's, keeps the task under way.
     const isCommandWork = !!e.command && !typed && e.command.name !== 'open-effort' && e.command.args.trim() !== ''
     if (e.isMeta || (e.command && !isCommandWork) || !isPerson(e.origin) || !e.text.trim() || isGoOn(e.text) || !(await read($, isOn))) return next(e)
-    // Inside the Main Flow, what the person types is part of it: no new task, no score. In retro, the last stage, a
+    // Inside the flow, what the person types is part of it: no new task, no score. In its last stage (Matt's retro), a
     // reply to it keeps the flow and new work ends it, as the score says.
     const inStage = (await read($, task)).stage
-    if (inStage !== null && inStage !== 'retro') return next(e)
+    if (inStage !== null && inStage !== lastStage(flow)) return next(e)
     // Typed over a running turn: part of the task under way, not a new one.
     if (e.turnId !== undefined) return next(e)
     // The prompt does not wait for Haiku: its requests go out at the session's effort until the score comes. A score
@@ -692,11 +739,12 @@ export const register: Register = on => {
     // The task's model, named only when it is not the session's.
     const tier = tierOf(runsOn)
     const taskTier = tier !== tierOf(own) ? tier : null
-    // A ticket handed to a sub-agent in the implement stage: it runs on the ticket's model and effort, on the task's
-    // model when the ticket names none.
-    const path = ticketIn(e.prompt)
-    const number = path ? ticketOf(path) : null
-    if (path && number && t.stage === 'implement') {
+    // A ticket handed to a sub-agent in the stage that works tickets: it runs on the ticket's model and effort, on the
+    // task's model when the ticket names none.
+    const flow = await flowOf($)
+    const path = ticketIn(flow, e.prompt)
+    const number = path ? ticketOf(flow, path) : null
+    if (path && number && t.stage !== null && t.stage === flow.tickets?.work) {
       const setting = await ticketSetting($, path)
       if (setting) {
         // Kept by this call's id until its agent starts: two hand-offs alike never mix, whatever their descriptions.
@@ -732,7 +780,7 @@ export const register: Register = on => {
   // stall at the top tells Claude to stop and ask the person. A sub-agent's check climbs its own effort, up to xhigh.
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
     // Printing a stage skill's SKILL.md (`cat …/to-spec/SKILL.md`) counts as reading it.
-    await stageSign($, e.agentId, stageOfPath(e.command))
+    await stageSign($, e.agentId, stageOfPath(await flowOf($), e.command))
     const ran = await next(e)
     // Only a check whose exit is its own counts: a piped, hidden or backgrounded one says nothing either way.
     if (ran.deny !== undefined || checkRun(e.command, e.run_in_background === true) !== 'counted' || !(await read($, isOn))) return ran
@@ -778,8 +826,9 @@ export const register: Register = on => {
       const now = await $.clock.now()
       await update($, seen, before => ({ ...before, [`agent:${id}`]: before[`agent:${id}`] ?? now }))
       // A sub-agent's first turn starts with the Agent call's prompt: one naming a ticket handed out takes it up.
-      const path = ticketIn(e.text)
-      const number = path ? ticketOf(path) : null
+      const flow = await flowOf($)
+      const path = ticketIn(flow, e.text)
+      const number = path ? ticketOf(flow, path) : null
       const handOff = number ? Object.entries(await read($, handed)).find(([, given]) => given.ticket === number) : undefined
       if (handOff) await takeUpTicket($, id, handOff[0])
     }
@@ -810,10 +859,19 @@ export const register: Register = on => {
     return res
   }).catch(($, e, next) => next(e))
 
-  // /open-effort opens the pane; /open-effort on|off switches the mod for this project, a person's own command only.
+  // /open-effort opens the pane; /open-effort on|off switches the mod for this project, a person's own command only;
+  // /open-effort flow has Claude ask the person about their own flow and write the project's file.
   on('command.run', { command: 'open-effort' }, async ($, e) => {
     const words = wordsFor(await read($, language))
     const arg = e.args.trim().toLowerCase()
+    if (arg === 'flow') {
+      if (!isPerson(e.origin)) return { text: words.onlyPersonFlow }
+      const skills = (await $.command.list()).filter(c => c.source !== 'builtin' && c.name !== 'open-effort').map(c => c.name)
+      // A prompt may not be submitted while this hook holds the command: it goes in a moment after, as a turn of its own.
+      const note = flowWriteNote(FLOW_FILE, skills)
+      void $.clock.sleep(FLOW_PROMPT_DELAY_MS).then(() => $.prompt.submit({ text: note })).catch(() => $.ui.toast(words.flowFailed))
+      return { text: words.flowWriting }
+    }
     if (arg === 'on' || arg === 'off') {
       if (!isPerson(e.origin)) return { text: words.onlyPerson }
       // The project's switch, as the pane's main toggle: the machine's stays the default for other projects.
@@ -828,13 +886,17 @@ export const register: Register = on => {
   // the stage track above it) sized to the band's width; on the terminal, the words alone. Then the pane's button.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.props.hasSurvey || !(await read($, isOn))) return next(e)
+    const short = (text: string) => (text.length > 26 ? `${text.slice(0, 25)}…` : text)
     const table = $.ui.resolve(e)
     const { Box, Button, Text } = table
     const words = wordsFor(await read($, language))
     const t = await read($, task)
+    const flow = await flowOf($)
     const model = taskModel(t, await read($, sessionModel))
     const own = await read($, sessionEffort)
     const rung = rungOf(t, own, model)
+    // The flow as the band names it: Matt's as the Main Flow, a project's own by its name.
+    const flowName = flow.source === 'matt' ? words.steps.stage : short(flow.name)
     const why: Why =
       t.isAtLadderEnd ? { kind: 'ladderEnd' }
       : t.climbed ? { kind: 'climbed' }
@@ -842,7 +904,7 @@ export const register: Register = on => {
       : t.score && t.effort ? { kind: 'scored', score: t.score }
       : { kind: 'own' }
     const onFable = !!rung?.isFable && !isFable(model)
-    const line = words.band(rung?.effort ?? null, onFable, why, t.stage)
+    const line = words.band(rung?.effort ?? null, onFable, why, t.stage, flowName)
     const pane = <Button key="pane" label="≡" onPress={() => togglePane($)} />
     if (e.surface === 'terminal' || !('Svg' in table)) {
       return (
@@ -857,7 +919,6 @@ export const register: Register = on => {
     useTheme(picked)
     // The band's cells are about 8 CSS pixels wide on the desktop; leave room for the pane's button.
     const room = Math.max(96, e.props.bodyColumns * 8 - 64)
-    const short = (text: string) => (text.length > 26 ? `${text.slice(0, 25)}…` : text)
     const source = t.stage ? 'stage' : t.score && t.effort ? 'score' : 'own'
     const reason = t.score ? words.reason({ kind: 'scored', score: t.score }) : words.reason(why)
     // The task's flow, left to right: what Haiku read (or the stage), then the effort in use, which carries the
@@ -878,9 +939,9 @@ export const register: Register = on => {
     const effortModel = onFable ? 'Fable 5.1' : modelName(model)
     const steps: Step[] = [
       source === 'stage'
-        ? { title: words.steps.stage, value: `${t.stage ?? ''}${t.ticket ? ` · ${words.steps.ticket(t.ticket)}` : ''}`, state: 'done', rank: 1 }
+        ? { title: flowName, value: `${t.stage ?? ''}${t.ticket ? ` · ${words.steps.ticket(t.ticket)}` : ''}`, state: 'done', rank: 1 }
         : t.skill
-          ? { title: words.steps.skill, value: `${t.skill}${t.score ? ` · ${short(reason)}` : ''}`, state: 'done', rank: 1 }
+          ? { title: flow.source === 'matt' ? words.steps.skill : words.steps.flowSkill, value: `${t.skill}${t.score ? ` · ${short(reason)}` : ''}`, state: 'done', rank: 1 }
           : { title: words.steps.read, value: source === 'score' ? short(reason) : words.steps.noScore, state: source === 'score' ? 'done' : 'idle', rank: 1 },
       {
         title: `${words.steps.effort} · ${effortModel}`,
@@ -901,15 +962,15 @@ export const register: Register = on => {
     steps.forEach((st, i) => {
       steps[i] = { ...st, isNew: isFresh(keys[i] ?? '') }
     })
-    const flow = stepsSvg(steps, room, e.props.isWorking, room)
-    const stages = t.stage ? stageSvg(t.stage, room, { isTrackNew: isFresh('track'), isStageNew: isFresh(`stage:${t.stage}`) }) : null
+    const drawn = stepsSvg(steps, room, e.props.isWorking, room)
+    const stages = t.stage ? stageSvg(flow.stages.map(s => s.name), t.stage, room, { isTrackNew: isFresh('track'), isStageNew: isFresh(`stage:${t.stage}`) }) : null
     // Sub-agents at work hang off the step at work as one node saying how many; their names follow, wrapping to the
     // band's width: buttons that open each agent's transcript, or labels where the surface cannot open one.
     const ids = await read($, running)
     const atWork = ids.length > 0 ? (await $.agent.list()).filter(a => ids.includes(a.id)) : []
     const band = room + 64
     const node = atWork.length > 0
-      ? agentsSvg(flow.anchor ?? 16, band - 8, `${words.steps.agents} · ${words.steps.agentsAt(atWork.length)}`, atWork.some(a => isFresh(`agent:${a.id}`)))
+      ? agentsSvg(drawn.anchor ?? 16, band - 8, `${words.steps.agents} · ${words.steps.agentsAt(atWork.length)}`, atWork.some(a => isFresh(`agent:${a.id}`)))
       : null
     const cut = (text: string, n: number) => (text.length > n ? `${text.slice(0, Math.max(1, n - 1))}…` : text)
     const openAgent = async (id: string) => {
@@ -929,10 +990,10 @@ export const register: Register = on => {
     const isPressable = e.surface !== 'desktop' && (await read($, canView))
     return (
       <Box flexDirection="column" gap={1}>
-        {stages && <Svg source={stages.source} width={stages.width} height={stages.height} alt={`Main Flow: ${t.stage}`} />}
+        {stages && <Svg source={stages.source} width={stages.width} height={stages.height} alt={`${flowName}: ${t.stage}`} />}
         <Box flexDirection="column">
           <Box justifyContent="space-between" alignItems="center" gap={1}>
-            <Svg source={flow.source} width={flow.width} height={flow.height} alt={line} />
+            <Svg source={drawn.source} width={drawn.width} height={drawn.height} alt={line} />
             {pane}
           </Box>
           {node && <Svg source={node.source} width={node.width} height={node.height} alt={words.steps.agentsAt(atWork.length)} />}
@@ -972,6 +1033,7 @@ export const register: Register = on => {
     const choice = await read($, languageChoice)
     const list = await read($, history)
     const lacking = await read($, missing)
+    const used = await read($, flowState)
     const name = p?.name ?? '-'
     const pickedFlowModel = await read($, flowModel)
     const picked = await read($, themeChoice)
@@ -1031,24 +1093,25 @@ export const register: Register = on => {
           row(words.useHere(name), toggle('project-on', 'project-off', s.project ?? s.machine, value => setSwitches($, x => ({ ...x, project: value })))),
         )}
         {section(
-          words.mainFlow,
+          words.flow,
+          // A file with a problem names no flow: the pane says what is wrong with it instead.
+          used.problem !== null ? <Text color="#ef4444">{words.flowProblem(used.problem)}</Text> : <Text>{words.flowSource(used.flow.name, used.file)}</Text>,
           row(words.useHere(name), toggle('flow-project-on', 'flow-project-off', s.flowProject ?? s.flowMachine, value => setSwitches($, x => ({ ...x, flowProject: value })))),
           <Box flexDirection="column" gap={1}>
             <Text>{words.flowModel}</Text>
             {segmented(FLOW_MODELS.map(pick => ({ key: `flow-model-${pick}`, label: words.flowModels[pick], isPicked: pickedFlowModel === pick, onPress: () => setFlowModel($, pick) })))}
             <Text dimColor>{words.flowModelLimits[pickedFlowModel]}</Text>
           </Box>,
-          ...(lacking.length > 0
+          ...(lacking.length > 0 && used.problem === null
             ? [
                 <Box flexDirection="column">
                   <Text color="#ef4444">{words.missing(lacking)}</Text>
-                  <Text dimColor>{words.install}</Text>
-                  {INSTALL_COMMANDS.map(c => (
-                    <Text key={c}>{c}</Text>
-                  ))}
+                  {used.flow.source === 'matt' && <Text dimColor>{words.install}</Text>}
+                  {used.flow.source === 'matt' && INSTALL_COMMANDS.map(c => <Text key={c}>{c}</Text>)}
                 </Box>,
               ]
             : []),
+          <Text dimColor>{words.flowHint}</Text>,
         )}
         {section(
           words.language,
@@ -1086,7 +1149,7 @@ export const register: Register = on => {
           words.advanced,
           <Text dimColor>{words.defaults}</Text>,
           row('open-effort', toggle('machine-on', 'machine-off', s.machine, value => setSwitches($, x => ({ ...x, machine: value })))),
-          row(words.mainFlow, toggle('flow-machine-on', 'flow-machine-off', s.flowMachine, value => setSwitches($, x => ({ ...x, flowMachine: value })))),
+          row(words.flow, toggle('flow-machine-on', 'flow-machine-off', s.flowMachine, value => setSwitches($, x => ({ ...x, flowMachine: value })))),
         )}
       </Box>
     )
