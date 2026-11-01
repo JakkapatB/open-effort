@@ -1,5 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
+import { isNewer } from '../hooks/update'
 import { BAND, DAY_MS, PANE, SURFACES, engine, paneText, pressPane, start } from './engine'
 
 const INSTALLED = { '.claude-plugin/plugin.json': JSON.stringify({ name: 'open-effort', version: '0.3.0' }) }
@@ -113,7 +114,7 @@ test('a newer version shows a card at the top of the pane and a dot on the band�
   const pane = await paneText($)
   expect(pane).toContain('0.4.0 is out · you have 0.3.0')
   expect(pane.indexOf('0.4.0 is out · you have 0.3.0')).toBeLessThan(pane.indexOf('Switch'))
-  expect(pane).toContain('github.com/JakkapatB/open-effort/releases')
+  expect(pane).toContain('Releases on GitHub')
   expect(await paneButton($)).toBe('≡ ●')
 })
 
@@ -253,3 +254,70 @@ for (const surface of SURFACES) {
     })
   }
 }
+
+// Read the day before the clock's start: the next daily read is due.
+const READ_EARLIER = { latestVersion: { at: Date.UTC(2026, 9, 30, 6, 0), version: '0.4.0' } }
+// Read an hour before: no daily read is due.
+const READ_RECENTLY = { latestVersion: { at: Date.UTC(2026, 9, 31, 6, 0), version: '0.4.0' } }
+
+test('versions compare by their numbers', () => {
+  expect(isNewer('0.10.0', '0.9.0')).toBe(true)
+  expect(isNewer('1.0.0', '0.99.99')).toBe(true)
+  expect(isNewer('0.3.0', '0.3.0')).toBe(false)
+  expect(isNewer('0.2.9', '0.3.0')).toBe(false)
+})
+
+test('a check that never answers gives up after a few seconds, and Check can be pressed again', async ($, on) => {
+  engine(on, { files: INSTALLED, latest: 'never', store: { checkUpdates: false }, isQuick: true })
+  await start($)
+  await pressPane($, 'update-check')
+
+  const pane = await paneText($)
+  expect(pane).toContain('Check now')
+  expect(pane).not.toContain('checking…')
+})
+
+test('a pressed Check that cannot reach GitHub says so, and keeps the newest version already known', async ($, on) => {
+  engine(on, { files: INSTALLED, latest: 'fail', store: READ_RECENTLY })
+  await start($)
+  await settle()
+  await pressPane($, 'update-check')
+
+  const pane = await paneText($)
+  expect(pane).toContain("Couldn't reach GitHub just now")
+  expect(pane).toContain('0.4.0 is out')
+})
+
+test('a check that finishes during an update leaves the update alone: one update, and its Reload stays', async ($, on) => {
+  const { ran } = engine(on, { files: INSTALLED, latest: 'never', store: READ_EARLIER, isQuick: true })
+  await start($)
+  // The daily read is still out when Update is pressed, and gives up after it.
+  await pressPane($, 'update-run')
+  await new Promise(resolve => setTimeout(resolve, 120))
+
+  expect(ran.length).toBe(2)
+  const pane = await paneText($)
+  expect(pane).toContain('Updated to 0.4.0')
+  expect(pane).toContain('Reload now')
+})
+
+test('Check after an update keeps its Reload button', async ($, on) => {
+  engine(on, { files: INSTALLED, latest: NEWER })
+  await start($)
+  await settle()
+  await pressPane($, 'update-run')
+  await pressPane($, 'update-check')
+
+  expect(await paneText($)).toContain('Reload now')
+})
+
+test('a failing store write during a check does not leave the pane checking', async ($, on) => {
+  engine(on, { files: INSTALLED, latest: SAME, store: { checkUpdates: false }, failingKeys: ['latestVersion'] })
+  await start($)
+  // The press itself fails with the store; the pane is unmounted all the same.
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'update-check' }).catch(() => undefined)
+  await ui.unmount()
+
+  expect(await paneText($)).toContain('Check now')
+})

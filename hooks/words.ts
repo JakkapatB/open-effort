@@ -94,6 +94,7 @@ export type PaneWords = {
   /** The header card when a newer version is out: the newest, and the one installed. */
   newVersion: (latest: string, current: string) => string
   whatChanged: string
+  releases: string
   updateNow: string
   updating: string
   updated: (version: string) => string
@@ -261,6 +262,7 @@ const EN: Words = {
     newerOut: v => `${v} is out`,
     newVersion: (latest, current) => `${latest} is out · you have ${current}`,
     whatChanged: 'What changed:',
+    releases: 'Releases on GitHub',
     updateNow: 'Update now',
     updating: 'updating…',
     updated: v => `Updated to ${v}.`,
@@ -348,6 +350,7 @@ const TH: Words = {
     newerOut: v => `มี ${v} แล้ว`,
     newVersion: (latest, current) => `มี ${latest} แล้ว · ที่ติดตั้งอยู่ ${current}`,
     whatChanged: 'เปลี่ยนอะไรบ้าง:',
+    releases: 'หน้า Releases บน GitHub',
     updateNow: 'อัปเดตเลย',
     updating: 'กำลังอัปเดต…',
     updated: v => `อัปเดตเป็น ${v} แล้ว`,

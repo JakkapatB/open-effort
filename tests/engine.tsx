@@ -77,6 +77,10 @@ export type EngineOptions = {
   processes?: readonly ({ exitCode: number; stdout?: string; stderr?: string } | 'throw')[]
   /** Environment variables the mod may read. */
   env?: Record<string, string>
+  /** Waits take a hundredth of their time, for a test of something that gives up after seconds. */
+  isQuick?: boolean
+  /** Store keys whose writes fail, as on a full disk. */
+  failingKeys?: readonly string[]
   /** The person's own skills and other plugins' among the session's commands: a name, and the plugin it comes from. */
   skills?: readonly { name: string; plugin?: string }[]
   /** Why the surface will not put an agent's transcript in view (the desktop app draws no main view); default it does. */
@@ -107,7 +111,7 @@ export function engine(on: On, options: EngineOptions = {}) {
   on('clock.now', () => ({ value: clock.now }))
   // A wait takes real time, as it does in the app: a score that comes within the prompt's grace still goes with it.
   on('clock.sleep', async (_, e) => {
-    await new Promise(resolve => setTimeout(resolve, e.ms))
+    await new Promise(resolve => setTimeout(resolve, options.isQuick ? e.ms / 100 : e.ms))
     return { value: undefined }
   })
 
@@ -146,6 +150,7 @@ export function engine(on: On, options: EngineOptions = {}) {
   const written: string[] = []
   on('store.get', (_, e) => ({ value: store.get(e.key) }))
   on('store.set', (_, e) => {
+    if (options.failingKeys?.includes(e.key)) throw new Error('disk full')
     written.push(JSON.stringify(e))
     store.set(e.key, e.value)
     return { value: undefined }

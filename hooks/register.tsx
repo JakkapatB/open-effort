@@ -18,7 +18,7 @@ import {
 import type { FlowModel } from './policy'
 import { SCORE_GRACE_MS, SCORE_SYSTEM, SCORE_TIMEOUT_MS, isGoOn, isUnsure, scorePrompt, scoredFrom } from './score'
 import type { Scored } from './score'
-import { CHECK_EVERY_MS, CHECK_TIMEOUT_MS, RELEASES_URL, UPDATE_COMMAND, UPDATE_STEPS, UPDATE_TIMEOUT_MS, UPDATE_URL, isNewer, reasonOf, versionOf } from './update'
+import { CHECK_EVERY_MS, CHECK_TIMEOUT_MS, RELEASES_URL, UPDATE_COMMAND, UPDATE_STEPS, UPDATE_TIMEOUT_MS, UPDATE_URL, newerOf, reasonOf, versionOf } from './update'
 import { clockTime, languageOf, modelName, wordsFor } from './words'
 import type { Why } from './words'
 
@@ -69,7 +69,7 @@ const ticketReads = atom({ plugin: 'open-effort', key: 'ticketReads' } as const,
 // Updates of the mod itself: the daily read's switch, the versions, and the step the pane is at.
 const updates = atom(
   { plugin: 'open-effort', key: 'updates' } as const,
-  { isDaily: true, current: null, latest: null, step: 'idle', isUnreached: false, reason: null } as UpdateState,
+  { isDaily: true, current: null, latest: null, isChecking: false, isUnreached: false, step: 'idle', reason: null } as UpdateState,
 )
 // Whether the surface can put an agent's transcript in view; false once it said it draws no main view. The desktop
 // app never can: its band never offers it.
@@ -237,15 +237,11 @@ async function setLanguage($: EngineInterface, choice: LanguageChoice): Promise<
 
 /** The version installed: the plugin's own plugin.json; null when it cannot be read. */
 async function installedVersion($: EngineInterface): Promise<string | null> {
-  for (const path of [`${$.plugin.root}/.claude-plugin/plugin.json`, `${$.plugin.root}/plugin.json`]) {
-    try {
-      const version = versionOf(await $.fs.read(path))
-      if (version) return version
-    } catch {
-      // The next place, or no version.
-    }
+  try {
+    return versionOf(await $.fs.read(`${$.plugin.root}/.claude-plugin/plugin.json`))
+  } catch {
+    return null
   }
-  return null
 }
 
 /** The newest version on GitHub, read through the host; null when it cannot be read within a few seconds. */
@@ -268,13 +264,24 @@ async function checkForUpdate($: EngineInterface, isPressed: boolean): Promise<v
   const kept = (await $.store.get(STORE_LATEST)) as { at?: unknown; version?: unknown } | undefined
   const keptVersion = typeof kept?.version === 'string' ? kept.version : null
   if (keptVersion) await update($, updates, u => ({ ...u, latest: u.latest ?? keptVersion }))
-  const state = await read($, updates)
-  if (state.step === 'checking' || state.step === 'updating') return
-  if (!isPressed && (!state.isDaily || (typeof kept?.at === 'number' && now - kept.at < CHECK_EVERY_MS))) return
-  await update($, updates, (u): UpdateState => ({ ...u, step: 'checking' }))
-  const version = await readLatest($)
-  if (version) await $.store.set(STORE_LATEST, { at: now, version })
-  await update($, updates, (u): UpdateState => ({ ...u, step: 'idle', latest: version ?? u.latest, isUnreached: isPressed && !version }))
+  const isDue = isPressed || ((await read($, updates)).isDaily && !(typeof kept?.at === 'number' && now - kept.at < CHECK_EVERY_MS))
+  if (!isDue) return
+  // One read at a time, claimed in the same change that marks it running.
+  let isClaimed = false
+  await update($, updates, (u): UpdateState => {
+    if (u.isChecking) return u
+    isClaimed = true
+    return { ...u, isChecking: true }
+  })
+  if (!isClaimed) return
+  let version: string | null = null
+  try {
+    version = await readLatest($)
+    if (version) await $.store.set(STORE_LATEST, { at: now, version })
+  } finally {
+    // Only the read's own fields: an update running meanwhile keeps its step.
+    await update($, updates, (u): UpdateState => ({ ...u, isChecking: false, latest: version ?? u.latest, isUnreached: isPressed && !version }))
+  }
 }
 
 /**
@@ -283,24 +290,30 @@ async function checkForUpdate($: EngineInterface, isPressed: boolean): Promise<v
  * binary that cannot run, stops it with why; the pane then gives the command to run instead.
  */
 async function runUpdate($: EngineInterface): Promise<void> {
-  if ((await read($, updates)).step === 'updating') return
-  await update($, updates, (u): UpdateState => ({ ...u, step: 'updating', reason: null }))
-  const bin = (await $.env.get('CLAUDE_CODE_EXECPATH')) || 'claude'
-  for (const step of UPDATE_STEPS) {
-    let res: { exitCode: number; stdout: string; stderr: string }
-    try {
-      res = await $.process.run([bin, ...step], { timeoutMs: UPDATE_TIMEOUT_MS })
-    } catch {
-      await update($, updates, (u): UpdateState => ({ ...u, step: 'failed', reason: null }))
-      return
+  // One update at a time, claimed in the same change that marks it running.
+  let isClaimed = false
+  await update($, updates, (u): UpdateState => {
+    if (u.step === 'updating') return u
+    isClaimed = true
+    return { ...u, step: 'updating', reason: null }
+  })
+  if (!isClaimed) return
+  let outcome: Pick<UpdateState, 'step' | 'reason'> = { step: 'updated', reason: null }
+  try {
+    const bin = (await $.env.get('CLAUDE_CODE_EXECPATH')) || 'claude'
+    for (const step of UPDATE_STEPS) {
+      const res = await $.process.run([bin, ...step], { timeoutMs: UPDATE_TIMEOUT_MS })
+      if (res.exitCode !== 0) {
+        outcome = { step: 'failed', reason: reasonOf(res) }
+        break
+      }
     }
-    if (res.exitCode !== 0) {
-      const reason = reasonOf(res.stderr, res.stdout, res.exitCode)
-      await update($, updates, (u): UpdateState => ({ ...u, step: 'failed', reason }))
-      return
-    }
+  } catch {
+    // Claude Code could not be run from here.
+    outcome = { step: 'failed', reason: null }
+  } finally {
+    await update($, updates, (u): UpdateState => ({ ...u, ...outcome }))
   }
-  await update($, updates, (u): UpdateState => ({ ...u, step: 'updated' }))
 }
 
 /** The person pressed Reload after an update: Claude Code's /reload-plugins loads the new version now. */
@@ -584,13 +597,18 @@ export const register: Register = on => {
       const pickedTheme = await $.store.get(STORE_THEME)
       await update($, themeChoice, () => (isThemeId(pickedTheme) ? pickedTheme : 'claude'))
       await loadFlow($)
+    } catch {
+      // A store or setting that cannot be read leaves the defaults: on, English, no effort seen, no history.
+    }
+    // Updates of the mod: apart from the rest, so neither stops the other.
+    try {
       const isDaily = (await $.store.get(STORE_CHECK_UPDATES)) !== false
       const current = await installedVersion($)
-      await update($, updates, (u): UpdateState => ({ ...u, isDaily, current, step: 'idle', isUnreached: false, reason: null }))
+      await update($, updates, (u): UpdateState => ({ ...u, isDaily, current, isChecking: false, isUnreached: false, step: 'idle', reason: null }))
       // In the background: a slow network never holds the session.
       void checkForUpdate($, false).catch(() => undefined)
     } catch {
-      // A store or setting that cannot be read leaves the defaults: on, English, no effort seen, no history.
+      // No version shown; Check still reads.
     }
     try {
       await $.command.register({ name: 'open-effort', description: wordsFor(await read($, language)).commandDescription, argumentHint: 'on | off | flow' })
@@ -1033,8 +1051,7 @@ export const register: Register = on => {
     const onFable = !!rung?.isFable && (!isFable(model) || isFable(t.climbModel))
     const line = words.band(rung?.effort ?? null, onFable, why, t.stage, flowName)
     // A newer version of the mod puts a dot on the pane's button: the band itself stays as wide as it was.
-    const up = await read($, updates)
-    const hasNewer = !!up.latest && !!up.current && isNewer(up.latest, up.current)
+    const hasNewer = newerOf(await read($, updates)) !== null
     const pane = <Button key="pane" label={hasNewer ? '≡ ●' : '≡'} onPress={() => togglePane($)} />
     if (e.surface === 'terminal' || !('Svg' in table)) {
       return (
@@ -1047,8 +1064,9 @@ export const register: Register = on => {
     const { Svg } = table
     const picked = await read($, themeChoice)
     useTheme(picked)
-    // The band's cells are about 8 CSS pixels wide on the desktop; leave room for the pane's button.
-    const room = Math.max(96, e.props.bodyColumns * 8 - 64)
+    // The band's cells are about 8 CSS pixels wide on the desktop; leave room for the pane's button, a dot wider with
+    // a new version.
+    const room = Math.max(96, e.props.bodyColumns * 8 - (hasNewer ? 80 : 64))
     const source = t.stage ? 'stage' : t.score && t.effort ? 'score' : 'own'
     const reason = t.score ? words.reason({ kind: 'scored', score: t.score }) : words.reason(why)
     // The task's flow, left to right: what Haiku read (or the stage), then the effort in use, which carries the
@@ -1166,10 +1184,9 @@ export const register: Register = on => {
     const lacking = await read($, missing)
     const used = await read($, flowState)
     const up = await read($, updates)
-    const newer = up.latest && up.current && isNewer(up.latest, up.current) ? up.latest : null
+    const newer = newerOf(up)
     const status =
-      up.isUnreached ? words.unreached
-      : newer ? words.newerOut(newer)
+      newer ? words.newerOut(newer)
       : up.latest && up.current ? words.upToDate(up.current)
       : words.notChecked
     const name = p?.name ?? '-'
@@ -1254,7 +1271,7 @@ export const register: Register = on => {
               </Box>
             )}
             <Text dimColor>{words.whatChanged}</Text>
-            {'Link' in table ? <table.Link href={RELEASES_URL} label={RELEASES_URL} /> : <Text>{RELEASES_URL}</Text>}
+            {'Link' in table ? <table.Link href={RELEASES_URL} label={words.releases} /> : <Text>{RELEASES_URL}</Text>}
           </Box>
         )}
         {section(
@@ -1318,9 +1335,10 @@ export const register: Register = on => {
           words.updates,
           <Text>{words.installed(up.current ?? '-')}</Text>,
           <Box flexWrap="wrap" alignItems="center" gap={1}>
-            {up.step === 'checking' ? <Text dimColor>{words.checking}</Text> : <Button key="update-check" label={words.check} variant="secondary" onPress={() => checkForUpdate($, true)} />}
+            {up.isChecking ? <Text dimColor>{words.checking}</Text> : <Button key="update-check" label={words.check} variant="secondary" onPress={() => checkForUpdate($, true)} />}
             <Text dimColor>{status}</Text>
           </Box>,
+          ...(up.isUnreached ? [<Text dimColor>{words.unreached}</Text>] : []),
           row(words.daily, toggle('updates-daily-on', 'updates-daily-off', up.isDaily, value => setDailyCheck($, value))),
           <Text dimColor>{words.dailyNote}</Text>,
         )}
