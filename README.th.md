@@ -54,7 +54,7 @@ claude plugin marketplace add JakkapatB/open-effort && claude plugin install ope
 /plugin install open-effort --marketplace JakkapatB/open-effort
 ```
 
-**หรือในแอป desktop:** **Settings** → **Customize** → **Plugins** → **+ Add** → **Add marketplace** → ใส่ `JakkapatB/open-effort` → **Sync** แล้วกดติดตั้ง **open-effort**
+**หรือในแอป desktop:** **Settings** → **Customize** → **Plugins** → **+ Add** → **Add marketplace** → ใส่ `JakkapatB/open-effort` → **Sync** จากนั้นไปที่แท็บ **Discover** หา **Open effort** แล้วกด **Add to this computer** ▾ → **Install for me** เพื่อให้ใช้ได้ทุกโปรเจกต์ ในแอป desktop การพิมพ์ `/plugin install …` จะค้นหาแค่ใน plugin directory ของ Anthropic ซึ่งไม่มี open-effort
 
 ไม่ต้องตั้งค่าเพิ่ม เปิด session ใหม่แล้วแถบจะขึ้นเหนือช่องแชทเอง
 
