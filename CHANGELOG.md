@@ -1,10 +1,16 @@
 # Changelog
 
+## 0.3.0
+
+### Minor Changes
+
+- f905caa: Climbing past the top effort no longer jumps to Fable 5.1 by itself. Claude stops and asks before moving the task up one model (Sonnet → Opus → Fable 5.1), and with a yes the task carries on there from high. Keeping the model means three more failing checks stop the work. A ticket's sub-agent climbs no further than Opus 5.5.
+
 ## 0.2.0
 
 - A project can use its own flow instead of Matt Pocock's Main Flow: `.claude/open-effort.json` names its stages, the
   skills that run each, the effort each starts at, and where its tickets are written, worked and kept. `/open-effort
-  flow` has Claude ask you about your flow and write the file. A file with a problem keeps the flow off, and the pane
+flow` has Claude ask you about your flow and write the file. A file with a problem keeps the flow off, and the pane
   says why.
 - The pane's Main Flow section is now **Flow**, and says which flow the project uses.
 - Meets the plugin directory's checks: the Haiku call lives in the hooks module's main file, and a ticket's sub-agent
