@@ -77,9 +77,9 @@ Nothing to set up: start a new session and the band appears above the prompt.
 
 ### Keep it up to date
 
-Claude Code updates plugins by itself only from Anthropic's own marketplaces, so open-effort stays at the version you installed until you update it or turn on auto-update.
+Claude Code updates plugins by itself only from Anthropic's own marketplaces, and the desktop app turns that off for every marketplace. So open-effort tells you itself: once a day it checks for a new version, and when one is out, the band's **≡** button reads **≡ ●**, and the top of the pane shows an **Update now** button. Updating runs Claude Code's own update; then **Reload now** runs the new version in the session, or start a new one. Where the pane cannot run the update, it shows the command to run instead. The pane's **Updates** section has **Check now** and a switch for the daily check.
 
-**Turn on auto-update, once.** In Claude Code in the terminal, run `/plugin`, open **Marketplaces**, pick **open-effort** and choose **Enable auto-update**. Or add this entry inside `~/.claude/settings.json` (next to any `extraKnownMarketplaces` entries already there):
+**Or turn on Claude Code's own auto-update, once** (terminal only). In Claude Code in the terminal, run `/plugin`, open **Marketplaces**, pick **open-effort** and choose **Enable auto-update**. Or add this entry inside `~/.claude/settings.json` (next to any `extraKnownMarketplaces` entries already there):
 
 ```json
 "extraKnownMarketplaces": {
@@ -92,8 +92,9 @@ Claude Code updates plugins by itself only from Anthropic's own marketplaces, so
 
 From then on, a few minutes into a session Claude Code fetches a new version if there is one, and the next session runs it.
 
-**Update now.**
+**Or update by hand.**
 
+- **The pane:** **Updates** → **Check now**, then **Update now**.
 - **Desktop app:** **Settings** → **Customize** → **Plugins** → **Open effort** → **Update**. If the button stays grey, use the shell line below.
 - **Shell:**
 
@@ -259,7 +260,8 @@ Test, typecheck, build and lint runs (JavaScript/TypeScript, Python, Go, Rust, N
 
 - Everything stays in Claude Code's plugin store on your machine.
 - The history never keeps what you typed: only times, efforts, readings, counts and model names.
-- **What it sends, and where.** The mod makes no network calls of its own. It sends text to one place: Claude's Haiku model, through Claude Code's own model call (`$.model.complete`), on your account, like any other Claude Code request. It sends:
+- **The update check.** At most once a day per machine (a read that fails is tried again next session), and when you press **Check now**, the mod reads the newest version number: one HTTPS request, through Claude Code, for this project's `.claude-plugin/plugin.json` on raw.githubusercontent.com. Nothing about you or your work is in it; GitHub sees the request as any web visit. Turn the daily check off in the pane's **Updates** section. **Update now** runs Claude Code's own plugin update (`claude plugin marketplace update open-effort`, then `claude plugin update open-effort@open-effort`), and **Reload now** runs `/reload-plugins`; both only when you press them.
+- **What it sends, and where.** Apart from the update check, the mod makes no network calls of its own. It sends text to one place: Claude's Haiku model, through Claude Code's own model call (`$.model.complete`), on your account, like any other Claude Code request. It sends:
   - each new request you type, and the last 800 characters of Claude's last message when a task is under way, to read how hard the work is;
   - the text of a ticket file without `Model:` and `Effort:` lines, to read the same for the ticket.
 - **Notes to Claude.** It adds short notes for Claude to the conversation (`$.session.append`, and context on your prompt): to ask you about a stronger model or the flow, how to name a ticket's model and effort, and when to stop and ask you. They go to Claude with the conversation, as your messages do. `/open-effort flow` sends Claude one prompt of its own (`$.prompt.submit`) asking it to help you write the flow file; it names your installed skills and commands.
@@ -276,7 +278,7 @@ Test, typecheck, build and lint runs (JavaScript/TypeScript, Python, Go, Rust, N
 | `tool.call` on `Bash` | Counts test, lint, build and typecheck runs as passing or failing checks | Nothing |
 | `tool.call` on `Read`, `Skill`, `Edit`, `Write` | Notices a stage's skill being used, a ticket being read, a test being written | Nothing |
 | `tool.call` on `mcp__open-effort__stage`, `__model`, `__report` | Answers the mod's own three tools | They are the mod's own tools |
-| `turn.start`, `turn.complete`, `session.start`, `session.end` | Tracks sub-agents at work, the turn's history entry, the project's switches | Nothing |
+| `turn.start`, `turn.complete`, `session.start`, `session.end` | Tracks sub-agents at work, the turn's history entry, the project's switches; as a session starts, the daily update check | Nothing |
 | `command.run` on `open-effort` | Answers the mod's own `/open-effort` command: opens the pane, switches the mod, or, with `flow`, sends Claude the prompt to help write the flow file | It is the mod's own command; `flow` starts a turn of its own |
 | `ui.render` | Draws the band above the prompt and the pane | Adds the band and the pane |
 
@@ -316,6 +318,7 @@ claude plugin validate .
 | `hooks/checks.ts` | which commands count as checks |
 | `hooks/flow.ts` | the flow: Matt's Main Flow, a project's own file, its skills and tickets |
 | `hooks/main-flow.ts` | the notes and tools for the flow |
+| `hooks/update.ts` | the update check: where the newest version is read, and comparing versions |
 | `hooks/history.ts` | history entries |
 | `hooks/diagrams.ts` | the band, chart and themes as SVG |
 | `hooks/words.ts` | English and Thai text |

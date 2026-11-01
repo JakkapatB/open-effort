@@ -68,6 +68,19 @@ export type EngineOptions = {
   root?: string
   /** Files the mod may read, by path, as `$.fs.read` finds them. */
   files?: Record<string, string>
+  /**
+   * What GitHub answers for the newest plugin.json: its text, a failed request, or no answer at all (default: a failed
+   * request, as with no network).
+   */
+  latest?: string | 'fail' | 'never'
+  /** How each process the mod runs exits, in order (the last repeating); 'throw' when it cannot start. */
+  processes?: readonly ({ exitCode: number; stdout?: string; stderr?: string } | 'throw')[]
+  /** Environment variables the mod may read. */
+  env?: Record<string, string>
+  /** Waits take a hundredth of their time, for a test of something that gives up after seconds. */
+  isQuick?: boolean
+  /** Store keys whose writes fail, as on a full disk. */
+  failingKeys?: readonly string[]
   /** The person's own skills and other plugins' among the session's commands: a name, and the plugin it comes from. */
   skills?: readonly { name: string; plugin?: string }[]
   /** Why the surface will not put an agent's transcript in view (the desktop app draws no main view); default it does. */
@@ -98,7 +111,7 @@ export function engine(on: On, options: EngineOptions = {}) {
   on('clock.now', () => ({ value: clock.now }))
   // A wait takes real time, as it does in the app: a score that comes within the prompt's grace still goes with it.
   on('clock.sleep', async (_, e) => {
-    await new Promise(resolve => setTimeout(resolve, e.ms))
+    await new Promise(resolve => setTimeout(resolve, options.isQuick ? e.ms / 100 : e.ms))
     return { value: undefined }
   })
 
@@ -137,6 +150,7 @@ export function engine(on: On, options: EngineOptions = {}) {
   const written: string[] = []
   on('store.get', (_, e) => ({ value: store.get(e.key) }))
   on('store.set', (_, e) => {
+    if (options.failingKeys?.includes(e.key)) throw new Error('disk full')
     written.push(JSON.stringify(e))
     store.set(e.key, e.value)
     return { value: undefined }
@@ -165,7 +179,29 @@ export function engine(on: On, options: EngineOptions = {}) {
     ],
   }))
   on('settings.read', () => ({ value: options.settings ?? {} }))
-  on('command.run', () => ({ text: '' }))
+  const commands: { command: string; args: string }[] = []
+  on('command.run', (_, e) => {
+    commands.push({ command: e.command, args: e.args })
+    return { text: '' }
+  })
+  // The network: GitHub's plugin.json as the test says.
+  const fetched: string[] = []
+  on('http.fetch', async (_, e) => {
+    fetched.push(e.url)
+    if (options.latest === 'never') await new Promise(() => undefined)
+    if (options.latest === undefined || options.latest === 'fail') throw new Error('network unreachable')
+    return { value: { status: 200, ok: true, headers: {}, text: options.latest } }
+  })
+  // Processes run as told, recorded with their argument vectors.
+  const ran: string[][] = []
+  on('process.run', (_, e) => {
+    ran.push([...e.argv])
+    const outcomes = options.processes ?? [{ exitCode: 0 }]
+    const outcome = outcomes[Math.min(ran.length, outcomes.length) - 1]
+    if (!outcome || outcome === 'throw') throw new Error('spawn ENOENT')
+    return { value: { exitCode: outcome.exitCode, stdout: outcome.stdout ?? '', stderr: outcome.stderr ?? '', isStdoutTruncated: false, isStderrTruncated: false } }
+  })
+  on('env.get', (_, e) => ({ value: options.env?.[e.name] }))
   on('prompt.submit', (_, e) => {
     submitted.push(e)
     return { text: e.text, context: e.context }
@@ -199,7 +235,7 @@ export function engine(on: On, options: EngineOptions = {}) {
     }
     return bash.passes ? { result: {}, text: 'ok' } : { result: {}, text: 'Exit code 1', isError: true }
   })
-  return { sent, asked, submitted, bash, opened, written, clock, calls, viewed, where, store, conversation }
+  return { sent, asked, submitted, bash, opened, written, clock, calls, viewed, where, store, conversation, fetched, ran, commands }
 }
 
 export const DAY_MS = 24 * 60 * 60 * 1000

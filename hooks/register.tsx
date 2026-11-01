@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, PromptOrigin, Register, RenderChildren } from 'claude-code'
 
-import type { Declined, Effort, Flow, FlowState, HistoryEntry, Language, LanguageChoice, ModelTier, Project, Stage, SubAgent, Switches, Task, TicketSetting, TurnLog } from '../types'
+import type { Declined, Effort, Flow, FlowState, HistoryEntry, Language, LanguageChoice, ModelTier, Project, Stage, SubAgent, Switches, Task, TicketSetting, TurnLog, UpdateState } from '../types'
 import { checkRun, isTestFile } from './checks'
 import { THEMES, THEME_IDS, agentsSvg, bandKeys, historySvg, isThemeId, stageSvg, stepsSvg, useTheme } from './diagrams'
 import type { Loop, Step, ThemeId } from './diagrams'
@@ -18,6 +18,7 @@ import {
 import type { FlowModel } from './policy'
 import { SCORE_GRACE_MS, SCORE_SYSTEM, SCORE_TIMEOUT_MS, isGoOn, isUnsure, scorePrompt, scoredFrom } from './score'
 import type { Scored } from './score'
+import { CHECK_EVERY_MS, CHECK_TIMEOUT_MS, RELEASES_URL, UPDATE_COMMAND, UPDATE_STEPS, UPDATE_TIMEOUT_MS, UPDATE_URL, newerOf, reasonOf, versionOf } from './update'
 import { clockTime, languageOf, modelName, wordsFor } from './words'
 import type { Why } from './words'
 
@@ -65,6 +66,11 @@ const isRed = atom({ plugin: 'open-effort', key: 'isRed' } as const, false)
 // Haiku's readings of tickets without Model and Effort lines, by path, with the text read: read again only once the
 // ticket changes.
 const ticketReads = atom({ plugin: 'open-effort', key: 'ticketReads' } as const, {} as Record<string, { text: string; setting: TicketSetting }>)
+// Updates of the mod itself: the daily read's switch, the versions, and the step the pane is at.
+const updates = atom(
+  { plugin: 'open-effort', key: 'updates' } as const,
+  { isDaily: true, current: null, latest: null, isChecking: false, isUnreached: false, step: 'idle', reason: null } as UpdateState,
+)
 // Whether the surface can put an agent's transcript in view; false once it said it draws no main view. The desktop
 // app never can: its band never offers it.
 const canView = atom({ plugin: 'open-effort', key: 'canView' } as const, true)
@@ -133,6 +139,9 @@ const STORE_MAIN_FLOW = 'mainFlow'
 const STORE_FLOW_MODEL = 'flowModel'
 const STORE_LANGUAGE = 'language'
 const STORE_THEME = 'theme'
+const STORE_CHECK_UPDATES = 'checkUpdates'
+// The last read of the newest version: when, and what it found.
+const STORE_LATEST = 'latestVersion'
 
 const PANE = 'open-effort'
 
@@ -224,6 +233,102 @@ async function setLanguage($: EngineInterface, choice: LanguageChoice): Promise<
     await update($, language, () => languageOf(setting))
   }
   await $.store.set(STORE_LANGUAGE, choice)
+}
+
+/** The version installed: the plugin's own plugin.json; null when it cannot be read. */
+async function installedVersion($: EngineInterface): Promise<string | null> {
+  try {
+    return versionOf(await $.fs.read(`${$.plugin.root}/.claude-plugin/plugin.json`))
+  } catch {
+    return null
+  }
+}
+
+/** The newest version on GitHub, read through the host; null when it cannot be read within a few seconds. */
+async function readLatest($: EngineInterface): Promise<string | null> {
+  try {
+    const res = await Promise.race([$.http.fetch(UPDATE_URL), $.clock.sleep(CHECK_TIMEOUT_MS).then(() => null)])
+    return res && res.ok ? versionOf(res.text) : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Reads the newest version: the daily read as a session starts (`isPressed` false: once in 24 hours, never with the
+ * switch off), or at once when the person presses Check. What a read finds is kept with its time; a read that finds
+ * nothing keeps the last result and is tried again next time.
+ */
+async function checkForUpdate($: EngineInterface, isPressed: boolean): Promise<void> {
+  const now = await $.clock.now()
+  const kept = (await $.store.get(STORE_LATEST)) as { at?: unknown; version?: unknown } | undefined
+  const keptVersion = typeof kept?.version === 'string' ? kept.version : null
+  if (keptVersion) await update($, updates, u => ({ ...u, latest: u.latest ?? keptVersion }))
+  const isDue = isPressed || ((await read($, updates)).isDaily && !(typeof kept?.at === 'number' && now - kept.at < CHECK_EVERY_MS))
+  if (!isDue) return
+  // One read at a time, claimed in the same change that marks it running.
+  let isClaimed = false
+  await update($, updates, (u): UpdateState => {
+    if (u.isChecking) return u
+    isClaimed = true
+    return { ...u, isChecking: true }
+  })
+  if (!isClaimed) return
+  let version: string | null = null
+  try {
+    version = await readLatest($)
+    if (version) await $.store.set(STORE_LATEST, { at: now, version })
+  } finally {
+    // Only the read's own fields: an update running meanwhile keeps its step.
+    await update($, updates, (u): UpdateState => ({ ...u, isChecking: false, latest: version ?? u.latest, isUnreached: isPressed && !version }))
+  }
+}
+
+/**
+ * The person pressed Update: Claude Code's own update for the plugin, its steps in order, through the Claude Code
+ * binary the session runs on (else `claude` on the PATH). The mod installs nothing itself. A step that fails, or a
+ * binary that cannot run, stops it with why; the pane then gives the command to run instead.
+ */
+async function runUpdate($: EngineInterface): Promise<void> {
+  // One update at a time, claimed in the same change that marks it running.
+  let isClaimed = false
+  await update($, updates, (u): UpdateState => {
+    if (u.step === 'updating') return u
+    isClaimed = true
+    return { ...u, step: 'updating', reason: null }
+  })
+  if (!isClaimed) return
+  let outcome: Pick<UpdateState, 'step' | 'reason'> = { step: 'updated', reason: null }
+  try {
+    const bin = (await $.env.get('CLAUDE_CODE_EXECPATH')) || 'claude'
+    for (const step of UPDATE_STEPS) {
+      const res = await $.process.run([bin, ...step], { timeoutMs: UPDATE_TIMEOUT_MS })
+      if (res.exitCode !== 0) {
+        outcome = { step: 'failed', reason: reasonOf(res) }
+        break
+      }
+    }
+  } catch {
+    // Claude Code could not be run from here.
+    outcome = { step: 'failed', reason: null }
+  } finally {
+    await update($, updates, (u): UpdateState => ({ ...u, ...outcome }))
+  }
+}
+
+/** The person pressed Reload after an update: Claude Code's /reload-plugins loads the new version now. */
+async function reloadPlugins($: EngineInterface): Promise<void> {
+  try {
+    await $.command.run({ command: 'reload-plugins' })
+  } catch {
+    // The pane still says a new session runs the new version.
+  }
+}
+
+/** Switches the daily read, kept for the machine. */
+async function setDailyCheck($: EngineInterface, isDaily: boolean): Promise<void> {
+  await update($, updates, u => ({ ...u, isDaily }))
+  await $.store.set(STORE_CHECK_UPDATES, isDaily)
 }
 
 /** Who moved the task to a stage: the person's own stage command, or Claude's stage tool. */
@@ -495,6 +600,16 @@ export const register: Register = on => {
     } catch {
       // A store or setting that cannot be read leaves the defaults: on, English, no effort seen, no history.
     }
+    // Updates of the mod: apart from the rest, so neither stops the other.
+    try {
+      const isDaily = (await $.store.get(STORE_CHECK_UPDATES)) !== false
+      const current = await installedVersion($)
+      await update($, updates, (u): UpdateState => ({ ...u, isDaily, current, isChecking: false, isUnreached: false, step: 'idle', reason: null }))
+      // In the background: a slow network never holds the session.
+      void checkForUpdate($, false).catch(() => undefined)
+    } catch {
+      // No version shown; Check still reads.
+    }
     try {
       await $.command.register({ name: 'open-effort', description: wordsFor(await read($, language)).commandDescription, argumentHint: 'on | off | flow' })
     } catch {
@@ -529,6 +644,7 @@ export const register: Register = on => {
         switches: await read($, switches),
         missing: await read($, missing),
         flow: await read($, flowState),
+        updates: await read($, updates),
         task: await read($, task),
         sessionEffort: await read($, sessionEffort),
         sessionModel: await read($, sessionModel),
@@ -934,7 +1050,9 @@ export const register: Register = on => {
     // Fable 5.1 a climb reached is named; a session that runs on Fable from the start shows it as its model.
     const onFable = !!rung?.isFable && (!isFable(model) || isFable(t.climbModel))
     const line = words.band(rung?.effort ?? null, onFable, why, t.stage, flowName)
-    const pane = <Button key="pane" label="≡" onPress={() => togglePane($)} />
+    // A newer version of the mod puts a dot on the pane's button: the band itself stays as wide as it was.
+    const hasNewer = newerOf(await read($, updates)) !== null
+    const pane = <Button key="pane" label={hasNewer ? '≡ ●' : '≡'} onPress={() => togglePane($)} />
     if (e.surface === 'terminal' || !('Svg' in table)) {
       return (
         <Box gap={1}>
@@ -946,8 +1064,9 @@ export const register: Register = on => {
     const { Svg } = table
     const picked = await read($, themeChoice)
     useTheme(picked)
-    // The band's cells are about 8 CSS pixels wide on the desktop; leave room for the pane's button.
-    const room = Math.max(96, e.props.bodyColumns * 8 - 64)
+    // The band's cells are about 8 CSS pixels wide on the desktop; leave room for the pane's button, a dot wider with
+    // a new version.
+    const room = Math.max(96, e.props.bodyColumns * 8 - (hasNewer ? 80 : 64))
     const source = t.stage ? 'stage' : t.score && t.effort ? 'score' : 'own'
     const reason = t.score ? words.reason({ kind: 'scored', score: t.score }) : words.reason(why)
     // The task's flow, left to right: what Haiku read (or the stage), then the effort in use, which carries the
@@ -1064,6 +1183,12 @@ export const register: Register = on => {
     const list = await read($, history)
     const lacking = await read($, missing)
     const used = await read($, flowState)
+    const up = await read($, updates)
+    const newer = newerOf(up)
+    const status =
+      newer ? words.newerOut(newer)
+      : up.latest && up.current ? words.upToDate(up.current)
+      : words.notChecked
     const name = p?.name ?? '-'
     const pickedFlowModel = await read($, flowModel)
     const picked = await read($, themeChoice)
@@ -1118,6 +1243,37 @@ export const register: Register = on => {
             {(s.project ?? s.machine) ? `● ${words.on}` : `○ ${words.off}`}
           </Text>
         </Box>
+        {newer && up.current && (
+          <Box flexDirection="column" borderStyle="round" borderColor={ACCENT} paddingX={1} marginTop={1}>
+            <Text bold color={ACCENT}>
+              {words.newVersion(newer, up.current)}
+            </Text>
+            {up.step === 'updated' ? (
+              <Box flexDirection="column">
+                <Text>{words.updated(newer)}</Text>
+                <Box flexWrap="wrap" gap={1}>
+                  <Button key="update-reload" label={words.reload} variant="primary" onPress={() => reloadPlugins($)} />
+                </Box>
+                <Text dimColor>{words.reloadNote}</Text>
+              </Box>
+            ) : up.step === 'updating' ? (
+              <Text dimColor>{words.updating}</Text>
+            ) : (
+              <Box flexWrap="wrap" gap={1}>
+                <Button key="update-run" label={words.updateNow} variant="primary" onPress={() => runUpdate($)} />
+              </Box>
+            )}
+            {up.step === 'failed' && (
+              <Box flexDirection="column">
+                <Text color="#ef4444">{words.updateFailed(up.reason ?? words.cannotRun)}</Text>
+                <Text dimColor>{words.runThis}</Text>
+                <Text>{UPDATE_COMMAND}</Text>
+              </Box>
+            )}
+            <Text dimColor>{words.whatChanged}</Text>
+            {'Link' in table ? <table.Link href={RELEASES_URL} label={words.releases} /> : <Text>{RELEASES_URL}</Text>}
+          </Box>
+        )}
         {section(
           words.switches,
           row(words.useHere(name), toggle('project-on', 'project-off', s.project ?? s.machine, value => setSwitches($, x => ({ ...x, project: value })))),
@@ -1174,6 +1330,17 @@ export const register: Register = on => {
                 .reverse()
                 .map(entry => <Text key={String(entry.at)} dimColor>{`${clockTime(entry.at)} · ${words.entryTitle(entry)} · ${words.entry(entry)}`}</Text>)
             : []),
+        )}
+        {section(
+          words.updates,
+          <Text>{words.installed(up.current ?? '-')}</Text>,
+          <Box flexWrap="wrap" alignItems="center" gap={1}>
+            {up.isChecking ? <Text dimColor>{words.checking}</Text> : <Button key="update-check" label={words.check} variant="secondary" onPress={() => checkForUpdate($, true)} />}
+            <Text dimColor>{status}</Text>
+          </Box>,
+          ...(up.isUnreached ? [<Text dimColor>{words.unreached}</Text>] : []),
+          row(words.daily, toggle('updates-daily-on', 'updates-daily-off', up.isDaily, value => setDailyCheck($, value))),
+          <Text dimColor>{words.dailyNote}</Text>,
         )}
         {section(
           words.advanced,

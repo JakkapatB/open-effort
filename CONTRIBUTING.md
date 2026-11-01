@@ -63,6 +63,7 @@ Kinds: `feat`, `fix`, `perf`, `refactor`, `test`, `docs`, `chore`. Add detail in
 | `hooks/checks.ts` | which commands count as checks |
 | `hooks/flow.ts` | the flow: Matt's Main Flow, a project's own file, its skills and tickets |
 | `hooks/main-flow.ts` | the notes and tools sent to Claude for the flow |
+| `hooks/update.ts` | the update check: where the newest version is read, and comparing versions |
 | `hooks/diagrams.ts` | the band, chart and themes as SVG |
 | `hooks/words.ts` | English and Thai text |
 | `types/index.d.ts` | the mod's state contract |
