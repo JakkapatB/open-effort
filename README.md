@@ -43,19 +43,35 @@ price.
 
 ## Install
 
-**In a shell** (one line, for Claude Code in the terminal and the desktop app alike):
+<p align="center">
+  <img src="https://raw.githubusercontent.com/JakkapatB/open-effort/main/docs/images/install-en.png" width="820" alt="Three ways to install: one shell command; the /plugin line in Claude Code in the terminal; or in the desktop app, Settings, Customize, Plugins, + Add, Add marketplace, type JakkapatB/open-effort, Sync, then in the Discover tab Add to this computer and Install for me">
+</p>
+
+Pick one of the three ways:
+
+### 1. In a shell
+
+One line, for Claude Code in the terminal and the desktop app alike:
 
 ```bash
 claude plugin marketplace add JakkapatB/open-effort && claude plugin install open-effort@open-effort
 ```
 
-**Or inside Claude Code in the terminal:**
+### 2. Inside Claude Code in the terminal
 
 ```
 /plugin install open-effort --marketplace JakkapatB/open-effort
 ```
 
-**Or in the desktop app:** **Settings** → **Customize** → **Plugins** → **+ Add** → **Add marketplace** → `JakkapatB/open-effort` → **Sync**. Then, in the **Discover** tab, find **Open effort** and choose **Add to this computer** ▾ → **Install for me**, so it works in every project. In the desktop app, typing `/plugin install …` only searches Anthropic's plugin directory, where open-effort is not listed.
+### 3. In the desktop app
+
+1. **Settings** → **Customize** → **Plugins**
+2. **+ Add** → **Add marketplace**
+3. Type `JakkapatB/open-effort`, then press **Sync**
+4. In the **Discover** tab, find **Open effort**
+5. **Add to this computer** ▾ → **Install for me**, so it works in every project
+
+In the desktop app, typing `/plugin install …` only searches Anthropic's plugin directory, where open-effort is not listed.
 
 Nothing to set up: start a new session and the band appears above the prompt.
 

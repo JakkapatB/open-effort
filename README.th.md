@@ -42,19 +42,35 @@
 
 ## ติดตั้ง
 
-**ใน shell** (คำสั่งเดียว ใช้ได้ทั้ง Claude Code ใน terminal และในแอป desktop):
+<p align="center">
+  <img src="https://raw.githubusercontent.com/JakkapatB/open-effort/main/docs/images/install-th.png" width="820" alt="ติดตั้งได้ 3 วิธี: คำสั่งเดียวใน shell, พิมพ์ /plugin ใน Claude Code ใน terminal หรือในแอป desktop ไปที่ Settings, Customize, Plugins, + Add, Add marketplace ใส่ JakkapatB/open-effort กด Sync แล้วไปที่แท็บ Discover กด Add to this computer และ Install for me">
+</p>
+
+เลือกวิธีใดวิธีหนึ่ง:
+
+### 1. ใน shell
+
+คำสั่งเดียว ใช้ได้ทั้ง Claude Code ใน terminal และในแอป desktop:
 
 ```bash
 claude plugin marketplace add JakkapatB/open-effort && claude plugin install open-effort@open-effort
 ```
 
-**หรือพิมพ์ในช่องแชทของ Claude Code ใน terminal:**
+### 2. พิมพ์ในช่องแชทของ Claude Code ใน terminal
 
 ```
 /plugin install open-effort --marketplace JakkapatB/open-effort
 ```
 
-**หรือในแอป desktop:** **Settings** → **Customize** → **Plugins** → **+ Add** → **Add marketplace** → ใส่ `JakkapatB/open-effort` → **Sync** จากนั้นไปที่แท็บ **Discover** หา **Open effort** แล้วกด **Add to this computer** ▾ → **Install for me** เพื่อให้ใช้ได้ทุกโปรเจกต์ ในแอป desktop การพิมพ์ `/plugin install …` จะค้นหาแค่ใน plugin directory ของ Anthropic ซึ่งไม่มี open-effort
+### 3. ในแอป desktop
+
+1. **Settings** → **Customize** → **Plugins**
+2. **+ Add** → **Add marketplace**
+3. ใส่ `JakkapatB/open-effort` แล้วกด **Sync**
+4. ไปที่แท็บ **Discover** หา **Open effort**
+5. กด **Add to this computer** ▾ → **Install for me** เพื่อให้ใช้ได้ทุกโปรเจกต์
+
+ในแอป desktop การพิมพ์ `/plugin install …` จะค้นหาแค่ใน plugin directory ของ Anthropic ซึ่งไม่มี open-effort
 
 ไม่ต้องตั้งค่าเพิ่ม เปิด session ใหม่แล้วแถบจะขึ้นเหนือช่องแชทเอง
 
