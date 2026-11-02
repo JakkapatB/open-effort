@@ -88,6 +88,9 @@ export type PaneWords = {
   missing: (skills: readonly string[]) => string
   install: string
   updates: string
+  /** The band's buttons: a new version is out, and one is installed and not yet loaded. */
+  bandUpdate: string
+  bandReload: string
   installed: (version: string) => string
   check: string
   checking: string
@@ -258,6 +261,8 @@ const EN: Words = {
     missing: skills => `Missing skills: ${skills.join(', ')}`,
     install: 'Install them from a terminal, then reload plugins:',
     updates: 'Updates',
+    bandUpdate: '↑ Update',
+    bandReload: '↻ Reload',
     installed: v => `Installed: ${v}`,
     check: 'Check now',
     checking: 'checking…',
@@ -347,6 +352,8 @@ const TH: Words = {
     missing: skills => `ยังไม่มี skill: ${skills.join(', ')}`,
     install: 'ติดตั้งจาก terminal แล้ว reload plugins:',
     updates: 'อัปเดต',
+    bandUpdate: '↑ อัปเดต',
+    bandReload: '↻ โหลดใหม่',
     installed: v => `ที่ติดตั้งอยู่: ${v}`,
     check: 'เช็คตอนนี้',
     checking: 'กำลังเช็ค…',

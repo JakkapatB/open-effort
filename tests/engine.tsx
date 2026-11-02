@@ -115,6 +115,22 @@ export function engine(on: On, options: EngineOptions = {}) {
     return { value: undefined }
   })
 
+  // A timer waits until a test fires it; one stopped by the mod no longer waits.
+  const timers: (() => void)[] = []
+  const timerPeriods: number[] = []
+  on('clock.every', async (_, e, next) => {
+    timerPeriods.push(e.ms)
+    await new Promise<void>((resolve, reject) => {
+      const fire = () => resolve()
+      timers.push(fire)
+      next.signal.addEventListener('abort', () => {
+        timers.splice(timers.indexOf(fire), 1)
+        reject(new Error('stopped'))
+      })
+    })
+    return { value: undefined }
+  })
+
   on('session.start', (_, e) => {
     where.cwd = e.cwd
     where.root = options.root ?? e.cwd
@@ -236,7 +252,7 @@ export function engine(on: On, options: EngineOptions = {}) {
     const context = bash.context.length > 0 ? { context: bash.context } : {}
     return bash.passes ? { result: {}, text: 'ok', ...context } : { result: {}, text: 'Exit code 1', isError: true, ...context }
   })
-  return { sent, asked, submitted, bash, opened, written, clock, calls, viewed, where, store, conversation, fetched, ran, commands }
+  return { sent, asked, submitted, bash, opened, written, clock, calls, viewed, where, store, conversation, fetched, ran, commands, timers, timerPeriods }
 }
 
 export const DAY_MS = 24 * 60 * 60 * 1000

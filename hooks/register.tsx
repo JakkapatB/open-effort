@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, PromptOrigin, Register, RenderChildren } from 'claude-code'
+import type { EngineInterface, PromptOrigin, Register, RenderChildren, Timer } from 'claude-code'
 
 import type { Declined, Effort, Flow, FlowState, HistoryEntry, Language, LanguageChoice, ModelTier, Project, Stage, SubAgent, Switches, Task, TicketSetting, TurnLog, UpdateState } from '../types'
 import { checkRun, isTestFile } from './checks'
@@ -18,7 +18,7 @@ import {
 import type { FlowModel } from './policy'
 import { SCORE_SYSTEM, SCORE_TIMEOUT_MS, isGoOn, isUnsure, scorePrompt, scoredFrom } from './score'
 import type { Scored } from './score'
-import { CHECK_EVERY_MS, CHECK_TIMEOUT_MS, RELEASES_URL, UPDATE_COMMAND, UPDATE_STEPS, UPDATE_TIMEOUT_MS, UPDATE_URL, newerOf, reasonOf, versionOf } from './update'
+import { CHECK_EVERY_MS, CHECK_TIMEOUT_MS, LOOK_EVERY_MS, RELEASES_URL, UPDATE_COMMAND, UPDATE_STEPS, UPDATE_TIMEOUT_MS, UPDATE_URL, isNewer, newerOf, reasonOf, versionOf } from './update'
 import { clockTime, languageOf, modelName, wordsFor } from './words'
 import type { Why } from './words'
 
@@ -251,16 +251,20 @@ async function readLatest($: EngineInterface): Promise<string | null> {
 }
 
 /**
- * Reads the newest version: the daily read as a session starts (`isPressed` false: once in 24 hours, never with the
- * switch off), or at once when the person presses Check. What a read finds is kept with its time; a read that finds
+ * Reads the newest version: the daily read, as a session starts and at each look of an open session (`isPressed`
+ * false: once in 24 hours per machine, never with the switch off), or at once when the person presses Check. What a read finds is kept with its time; a read that finds
  * nothing keeps the last result and is tried again next time.
  */
 async function checkForUpdate($: EngineInterface, isPressed: boolean): Promise<void> {
   const now = await $.clock.now()
   const kept = (await $.store.get(STORE_LATEST)) as { at?: unknown; version?: unknown } | undefined
   const keptVersion = typeof kept?.version === 'string' ? kept.version : null
-  if (keptVersion) await update($, updates, u => ({ ...u, latest: u.latest ?? keptVersion }))
-  const isDue = isPressed || ((await read($, updates)).isDaily && !(typeof kept?.at === 'number' && now - kept.at < CHECK_EVERY_MS))
+  // What another session read reaches this one, as long as it is newer than what this one knows.
+  if (keptVersion) await update($, updates, u => (!u.latest || isNewer(keptVersion, u.latest) ? { ...u, latest: keptVersion } : u))
+  // The switch from the store, so that another session's press reaches this one.
+  const isDaily = (await $.store.get(STORE_CHECK_UPDATES)) !== false
+  await update($, updates, u => (u.isDaily === isDaily ? u : { ...u, isDaily }))
+  const isDue = isPressed || (isDaily && !(typeof kept?.at === 'number' && now - kept.at < CHECK_EVERY_MS))
   if (!isDue) return
   // One read at a time, claimed in the same change that marks it running.
   let isClaimed = false
@@ -576,6 +580,9 @@ async function togglePane($: EngineInterface): Promise<void> {
 // variable, as a hook held on Haiku reads atoms as they stood at its last write, not as a newer prompt left them.
 let scoreGeneration = 0
 
+// The timer that looks for a new version.
+let lookTimer: Timer | undefined
+
 export const register: Register = on => {
   // Once the session has started in its folder: the project, its switches and history, and the language.
   on('session.start', async ($, e, next) => {
@@ -612,6 +619,9 @@ export const register: Register = on => {
       await update($, updates, (u): UpdateState => ({ ...u, isDaily, current, isChecking: false, isUnreached: false, step: 'idle', reason: null }))
       // In the background: a slow network never holds the session.
       void checkForUpdate($, false).catch(() => undefined)
+      // An open session keeps looking; a session started again keeps one timer.
+      lookTimer?.cancel()
+      lookTimer = $.clock.every(LOOK_EVERY_MS, () => void checkForUpdate($, false).catch(() => undefined))
     } catch {
       // No version shown; Check still reads.
     }
@@ -1047,13 +1057,17 @@ export const register: Register = on => {
     // A prompt held on Haiku: the band says so, or the wait would look like a freeze.
     const isReading = await read($, isScoring)
     const line = isReading ? `open-effort · ${words.steps.reading}` : words.band(rung?.effort ?? null, onFable, why, t.stage, flowName)
-    // A newer version of the mod puts a dot on the pane's button: the band itself stays as wide as it was.
-    const hasNewer = newerOf(await read($, updates)) !== null
-    const pane = <Button key="pane" label={hasNewer ? '≡ ●' : '≡'} onPress={() => togglePane($)} />
+    // A newer version of the mod, or one installed and not yet loaded: a button of its own says what to do next.
+    const up = await read($, updates)
+    const nextLabel = up.step === 'updated' ? words.pane.bandReload : newerOf(up) ? words.pane.bandUpdate : null
+    const updateButton = nextLabel ? <Button key="update" label={nextLabel} variant="primary" onPress={() => openPane($)} /> : null
+    const pane = <Button key="pane" label="≡" onPress={() => togglePane($)} />
     if (e.surface === 'terminal' || !('Svg' in table)) {
+      // Only the wider row may wrap, with no blank row between: a terminal's band stays low.
       return (
-        <Box gap={1}>
+        <Box columnGap={1} {...(updateButton ? { flexWrap: 'wrap' as const } : {})}>
           <Text dimColor>{line}</Text>
+          {updateButton}
           {pane}
         </Box>
       )
@@ -1061,9 +1075,10 @@ export const register: Register = on => {
     const { Svg } = table
     const picked = await read($, themeChoice)
     useTheme(picked)
-    // The band's cells are about 8 CSS pixels wide on the desktop; leave room for the pane's button, a dot wider with
-    // a new version.
-    const room = Math.max(96, e.props.bodyColumns * 8 - (hasNewer ? 80 : 64))
+    // The band's cells are about 8 CSS pixels wide on the desktop; leave room for the buttons.
+    const room = Math.max(96, e.props.bodyColumns * 8 - (updateButton ? 176 : 64))
+    // The rows with nothing beside them keep the band's whole width.
+    const band = Math.max(160, e.props.bodyColumns * 8)
     const source = t.stage ? 'stage' : t.score && t.effort ? 'score' : 'own'
     const reason = t.score ? words.reason({ kind: 'scored', score: t.score }) : words.reason(why)
     // The task's flow, left to right: what Haiku read (or the stage), then the effort in use, which carries the
@@ -1109,12 +1124,11 @@ export const register: Register = on => {
       steps[i] = { ...st, isNew: isFresh(keys[i] ?? '') }
     })
     const drawn = stepsSvg(steps, room, e.props.isWorking, room)
-    const stages = t.stage ? stageSvg(flow.stages.map(s => s.name), t.stage, room, { isTrackNew: isFresh('track'), isStageNew: isFresh(`stage:${t.stage}`) }) : null
+    const stages = t.stage ? stageSvg(flow.stages.map(s => s.name), t.stage, band - 64, { isTrackNew: isFresh('track'), isStageNew: isFresh(`stage:${t.stage}`) }) : null
     // Sub-agents at work hang off the step at work as one node saying how many; their names follow, wrapping to the
     // band's width: buttons that open each agent's transcript, or labels where the surface cannot open one.
     const ids = await read($, running)
     const atWork = ids.length > 0 ? (await $.agent.list()).filter(a => ids.includes(a.id)) : []
-    const band = room + 64
     const node = atWork.length > 0
       ? agentsSvg(drawn.anchor ?? 16, band - 8, `${words.steps.agents} · ${words.steps.agentsAt(atWork.length)}`, atWork.some(a => isFresh(`agent:${a.id}`)))
       : null
@@ -1138,9 +1152,12 @@ export const register: Register = on => {
       <Box flexDirection="column" gap={1}>
         {stages && <Svg source={stages.source} width={stages.width} height={stages.height} alt={`${flowName}: ${t.stage}`} />}
         <Box flexDirection="column">
-          <Box justifyContent="space-between" alignItems="center" gap={1}>
+          <Box justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={1}>
             <Svg source={drawn.source} width={drawn.width} height={drawn.height} alt={line} />
-            {pane}
+            <Box flexWrap="wrap" gap={1}>
+              {updateButton}
+              {pane}
+            </Box>
           </Box>
           {node && <Svg source={node.source} width={node.width} height={node.height} alt={words.steps.agentsAt(atWork.length)} />}
           {node && (
@@ -1241,12 +1258,12 @@ export const register: Register = on => {
           </Text>
         </Box>
         {newer && up.current && (
-          <Box flexDirection="column" borderStyle="round" borderColor={ACCENT} paddingX={1} marginTop={1}>
+          <Box flexDirection="column" gap={1} borderStyle="round" borderColor={ACCENT} paddingX={1} paddingY={e.surface === 'terminal' ? 0 : 1} marginTop={1}>
             <Text bold color={ACCENT}>
               {words.newVersion(newer, up.current)}
             </Text>
             {up.step === 'updated' ? (
-              <Box flexDirection="column">
+              <Box flexDirection="column" gap={1}>
                 <Text>{words.updated(newer)}</Text>
                 <Box flexWrap="wrap" gap={1}>
                   <Button key="update-reload" label={words.reload} variant="primary" onPress={() => reloadPlugins($)} />
@@ -1267,8 +1284,10 @@ export const register: Register = on => {
                 <Text>{UPDATE_COMMAND}</Text>
               </Box>
             )}
-            <Text dimColor>{words.whatChanged}</Text>
-            {'Link' in table ? <table.Link href={RELEASES_URL} label={words.releases} /> : <Text>{RELEASES_URL}</Text>}
+            <Box flexWrap="wrap" columnGap={1}>
+              <Text dimColor>{words.whatChanged}</Text>
+              {'Link' in table ? <table.Link href={RELEASES_URL} label={words.releases} /> : <Text>{RELEASES_URL}</Text>}
+            </Box>
           </Box>
         )}
         {section(

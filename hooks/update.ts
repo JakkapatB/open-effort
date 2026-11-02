@@ -16,6 +16,9 @@ export const UPDATE_COMMAND = UPDATE_STEPS.map(step => ['claude', ...step].join(
 /** How often the daily read runs: once every 24 hours per machine. */
 export const CHECK_EVERY_MS = 24 * 60 * 60 * 1000
 
+/** How often an open session looks: at the version the machine kept, and at GitHub when the daily read is due. */
+export const LOOK_EVERY_MS = 30 * 60 * 1000
+
 /** How long a read may take before it is given up, so a slow network holds nothing. */
 export const CHECK_TIMEOUT_MS = 5000
 
