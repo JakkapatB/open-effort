@@ -109,7 +109,7 @@ export function engine(on: On, options: EngineOptions = {}) {
   // The clock stands still until a test moves it: 31 October 2026, 07:00 UTC.
   const clock = { now: Date.UTC(2026, 9, 31, 7, 0) }
   on('clock.now', () => ({ value: clock.now }))
-  // A wait takes real time, as it does in the app: a score that comes within the prompt's grace still goes with it.
+  // A wait takes real time, as it does in the app.
   on('clock.sleep', async (_, e) => {
     await new Promise(resolve => setTimeout(resolve, options.isQuick ? e.ms / 100 : e.ms))
     return { value: undefined }
@@ -208,8 +208,8 @@ export function engine(on: On, options: EngineOptions = {}) {
   })
   on('model.complete', async (_, e): Promise<{ value: ModelCompleteResult }> => {
     asked.push(e)
-    if (options.haikuDelayMs) await new Promise(resolve => setTimeout(resolve, options.haikuDelayMs))
     const haiku = replies[Math.min(asked.length, replies.length) - 1]
+    if (options.haikuDelayMs) await new Promise(resolve => setTimeout(resolve, options.haikuDelayMs))
     if (haiku === 'throw') throw new Error('network down')
     if (haiku === 'timeout') return { value: { isAnswered: false, reason: 'aborted', usage: USAGE } }
     if (haiku === 'fail') return { value: { isAnswered: false, reason: 'api-error', status: 529, error: 'overloaded', usage: USAGE } }
@@ -224,7 +224,7 @@ export function engine(on: On, options: EngineOptions = {}) {
     return { turnId: e.turnId, index: e.index, answer: '', toolUses: [], stopReason: 'end_turn', usage: null }
   })
   // Bash runs as told: `bash.passes` decides whether the next command exits 0.
-  const bash = { passes: true }
+  const bash = { passes: true, notes: [] as string[], context: [] as string[] }
   const calls: Record<string, unknown>[] = []
   on('tool.call', (_, e) => {
     calls.push(e as Record<string, unknown>)
@@ -233,7 +233,8 @@ export function engine(on: On, options: EngineOptions = {}) {
       const listed = AGENTS.find(a => a.description === (e as { description?: string }).description)
       return { result: listed ? { agentId: listed.id } : {}, text: 'started' }
     }
-    return bash.passes ? { result: {}, text: 'ok' } : { result: {}, text: 'Exit code 1', isError: true }
+    const context = bash.context.length > 0 ? { context: bash.context } : {}
+    return bash.passes ? { result: {}, text: 'ok', ...context } : { result: {}, text: 'Exit code 1', isError: true, ...context }
   })
   return { sent, asked, submitted, bash, opened, written, clock, calls, viewed, where, store, conversation, fetched, ran, commands }
 }
@@ -282,14 +283,15 @@ export async function pressPane($: Engine, key: string) {
   await ui.unmount()
 }
 
-/** Claude runs a command in Bash, which passes or fails as told; `agentId` runs it in a sub-agent. */
-export async function run($: Engine, bash: { passes: boolean }, command: string, passes: boolean, agentId?: string) {
+/** Claude runs a command in Bash, which passes or fails as told; `agentId` runs it in a sub-agent. What the mod tells Claude with the result lands in `bash.notes`. */
+export async function run($: Engine, bash: { passes: boolean; notes: string[] }, command: string, passes: boolean, agentId?: string) {
   bash.passes = passes
-  await $.tool.call({ tool: 'Bash', command, ...(agentId ? { agentId } : {}) })
+  const ran = await $.tool.call({ tool: 'Bash', command, ...(agentId ? { agentId } : {}) })
+  bash.notes.push(...((ran as { context?: readonly string[] }).context ?? []))
 }
 
 /** The same check failing `times` times in a row. */
-export async function fail($: Engine, bash: { passes: boolean }, times = 3, command = 'npm test', agentId?: string) {
+export async function fail($: Engine, bash: { passes: boolean; notes: string[] }, times = 3, command = 'npm test', agentId?: string) {
   for (let i = 0; i < times; i++) await run($, bash, command, false, agentId)
 }
 

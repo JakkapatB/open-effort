@@ -2,11 +2,8 @@ import type { ModelCompleteResult } from 'claude-code'
 
 import type { Clarity, ModelTier, Score, Size } from '../types'
 
-/** How long Haiku has to score a request; the prompt does not wait for it past SCORE_GRACE_MS. */
+/** How long a prompt waits for Haiku to score it; past this it goes at the session's effort. */
 export const SCORE_TIMEOUT_MS = 15000
-
-/** How long a prompt waits for its score, so a quick one still goes with it; a later one follows as a row. */
-export const SCORE_GRACE_MS = 1200
 
 /** Haiku's instructions: one line of readings, in the words parseScore reads. */
 export const SCORE_SYSTEM = [

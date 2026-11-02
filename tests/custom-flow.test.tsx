@@ -109,12 +109,12 @@ test('a project’s flow writes tickets where its file says, and works them on t
   const session = mock.session(on)
   await start($)
   await type($, 'add a login page with tests')
-  await stage($, 'tasks')
-  const written = session.appended().map(row => JSON.stringify(row.message)).join('\n')
+  const written = JSON.stringify(await stage($, 'tasks'))
   expect(written).toContain('Model:')
   expect(written).toContain('docs/tasks/*.md')
+  expect(session.appended().length).toBe(0)
 
-  await stage($, 'build')
+  expect(JSON.stringify(await stage($, 'build'))).toContain('file path in the Agent prompt')
   await $.tool.call({ tool: 'Read', file_path: `/work/app/${T2}` } as never)
   expect(await effortNow($, sent, 1)).toBe('medium')
   await $.tool.call({ tool: 'Agent', subagent_type: 'general-purpose', description: 'ticket 03', prompt: `Do /work/app/${T2}.`, tool_use_id: 'u1' } as never)
@@ -249,4 +249,16 @@ test('a project flow’s ticket is a file its glob matches whose name starts wit
   expect(ticketOf(parsed.flow, '/work/app/docs/02-top.md')).toBe('02')
   expect(ticketOf(parsed.flow, '/work/app/docs/tasks/login-form.md')).toBeNull()
   expect(ticketOf(parsed.flow, '/work/app/src/02-login-form.md')).toBeNull()
+})
+
+test('a project’s ticket stage typed as its command brings its note with the prompt', async ($, on) => {
+  const { submitted } = teamEngine(on)
+  const session = mock.session(on)
+  await start($)
+  await type($, 'add a login page with tests')
+  await stage($, 'plan')
+  await $.prompt.submit({ text: '/my-tasks', command: { name: 'my-tasks', args: '' }, wait: false, origin: { kind: 'composer' } })
+
+  expect(JSON.stringify(submitted.at(-1)?.context)).toContain('docs/tasks/*.md')
+  expect(session.appended().length).toBe(0)
 })
