@@ -176,13 +176,14 @@ test('Update runs Claude Code’s own update, both steps in order, then offers R
   expect(commands).toContainEqual({ command: 'reload-plugins', args: '' })
 })
 
-test('with no Claude Code binary named, Update runs `claude` from the PATH', async ($, on) => {
+test('with no binary named and none a shell finds, Update runs `claude` from the PATH', async ($, on) => {
   const { ran } = engine(on, { files: INSTALLED, latest: NEWER })
   await start($)
   await settle()
   await pressPane($, 'update-run')
 
-  expect(ran[0]?.[0]).toBe('claude')
+  expect(ran[0]?.[0]).toBe('/bin/sh')
+  expect(ran[1]?.[0]).toBe('claude')
 })
 
 test('a step that fails stops the update, says why, and gives the command to run', async ($, on) => {
@@ -198,15 +199,18 @@ test('a step that fails stops the update, says why, and gives the command to run
   expect(pane).not.toContain('Reload now')
 })
 
-test('when Claude Code cannot be run at all, the pane says so and gives the command', async ($, on) => {
-  engine(on, { files: INSTALLED, latest: NEWER, processes: ['throw'] })
+test('when Claude Code cannot be run at all, Claude is asked to update, and the pane says so', async ($, on) => {
+  const { submitted } = engine(on, { files: INSTALLED, latest: NEWER, processes: ['throw'] })
   await start($)
   await settle()
   await pressPane($, 'update-run')
+  await settle()
 
+  expect(submitted.at(-1)?.text).toContain('"$CLAUDE_CODE_EXECPATH" plugin update open-effort@open-effort')
   const pane = await paneText($)
-  expect(pane).toContain('Claude Code could not be run from here')
-  expect(pane).toContain('claude plugin update open-effort@open-effort')
+  expect(pane).toContain('Asked Claude to update it in the chat')
+  expect(pane).toContain('plugin update open-effort@open-effort')
+  expect(pane).not.toContain('Update now')
 })
 
 test('the update card speaks Thai', async ($, on) => {
@@ -307,7 +311,7 @@ test('a pressed Check that cannot reach GitHub says so, and keeps the newest ver
 })
 
 test('a check that finishes during an update leaves the update alone: one update, and its Reload stays', async ($, on) => {
-  const { ran } = engine(on, { files: INSTALLED, latest: 'never', store: READ_EARLIER, isQuick: true })
+  const { ran } = engine(on, { env: { CLAUDE_CODE_EXECPATH: BIN }, files: INSTALLED, latest: 'never', store: READ_EARLIER, isQuick: true })
   await start($)
   // The daily read is still out when Update is pressed, and gives up after it.
   await pressPane($, 'update-run')
@@ -560,7 +564,7 @@ for (const surface of ALL_SURFACES) {
 }
 
 test('once a check finds a new version, Update sits beside the Check button and runs', async ($, on) => {
-  const { ran } = engine(on, { files: INSTALLED, latest: NEWER })
+  const { ran } = engine(on, { files: INSTALLED, latest: NEWER, env: { CLAUDE_CODE_EXECPATH: BIN } })
   await start($)
   await settle()
   await pressPane($, 'update-run-here')
@@ -580,13 +584,13 @@ test('with nothing newer, Updates offers no Update button', async ($, on) => {
   expect(drawn).not.toContain('update-run-here')
 })
 
-test('a run that cannot start shows the error, twice over the pane, with the command by the binary’s full path', async ($, on) => {
-  engine(on, { files: INSTALLED, latest: NEWER, processes: ['throw'], env: { CLAUDE_CODE_EXECPATH: '/Library/Application Support/claude' } })
+test('a shell’s answer is the binary Update runs, and a step that fails names it in the command', async ($, on) => {
+  const found = '/Library/Application Support/claude'
+  const { ran } = engine(on, { files: INSTALLED, latest: NEWER, processes: [{ exitCode: 0, stdout: `${found}\n` }, { exitCode: 1, stderr: 'no' }] })
   await start($)
   await settle()
   await pressPane($, 'update-run-here')
 
-  const pane = await paneText($)
-  expect(pane.split('"/Library/Application Support/claude" plugin update open-effort@open-effort').length).toBe(3)
-  expect(pane).toContain('could not be run from here (')
+  expect(ran[0]?.[0]).toBe('/bin/sh')
+  expect(ran[1]?.[0]).toBe(found)
 })

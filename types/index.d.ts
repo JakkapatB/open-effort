@@ -142,7 +142,7 @@ export type UpdateState = {
   isChecking: boolean
   /** Whether the last check the person pressed could not reach GitHub. */
   isUnreached: boolean
-  step: 'idle' | 'updating' | 'updated' | 'failed'
+  step: 'idle' | 'asked' | 'updating' | 'updated' | 'failed'
   /** Why the update failed: the last line Claude Code wrote; null when Claude Code could not be run at all. */
   reason: string | null
 }

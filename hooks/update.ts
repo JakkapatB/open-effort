@@ -10,6 +10,15 @@ export const UPDATE_STEPS: readonly (readonly string[])[] = [
   ['plugin', 'update', 'open-effort@open-effort'],
 ]
 
+/** What a shell finds as Claude Code: the variable as child processes get it, else `claude` on the PATH. */
+export const FIND_CLAUDE = 'if [ -n "$CLAUDE_CODE_EXECPATH" ]; then printf %s "$CLAUDE_CODE_EXECPATH"; else command -v claude; fi'
+
+/** What Claude is asked when the pane cannot run Claude Code itself: its Bash tool knows the binary. */
+export const UPDATE_PROMPT = `Update the open-effort plugin: in Bash, run \`"$CLAUDE_CODE_EXECPATH" ${UPDATE_STEPS[0]?.join(' ')} && "$CLAUDE_CODE_EXECPATH" ${UPDATE_STEPS[1]?.join(' ')}\`, then say in one line whether it worked, and that a new session runs the new version. Do nothing else.`
+
+/** The steps for a terminal when even Claude was refused: finds Claude Code itself, in the desktop app's folder on a Mac. */
+export const MANUAL_COMMAND = `C=$(command -v claude || ls -t "$HOME/Library/Application Support/Claude/claude-code"/*/*/claude.app/Contents/MacOS/claude | head -n 1); ${UPDATE_STEPS.map(step => ['"$C"', ...step].join(' ')).join(' && ')}`
+
 /** The same steps as one shell line, for a machine where the pane cannot run them: by the binary's path when known. */
 export function updateCommand(bin?: string): string {
   const claude = !bin ? 'claude' : /\s/.test(bin) ? `"${bin}"` : bin
