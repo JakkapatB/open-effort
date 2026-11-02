@@ -293,6 +293,7 @@ Test, typecheck, build and lint runs (JavaScript/TypeScript, Python, Go, Rust, N
 - The mod API is new in Claude Code and may change.
 - Switching a task's model starts its prompt cache afresh.
 - A new request waits up to 15 seconds for Haiku's reading; with none by then, it goes at the session's own effort, on the task's model.
+- Pressing Esc or Stop during that wait cancels the request and keeps the task under way, but the desktop app may show "Claude couldn't process that message". Nothing broke: send the message again when you want it.
 - A command typed with words after it (`/fix-typo the title`) counts as a new request; a command alone keeps the task.
 - A resumed session starts with no task; the flow comes back when Claude names its stage.
 - `/open-effort flow` hands Claude its prompt a moment after the command, as a turn of its own.
