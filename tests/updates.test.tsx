@@ -194,7 +194,7 @@ test('a step that fails stops the update, says why, and gives the command to run
   expect(ran.length).toBe(1)
   const pane = await paneText($)
   expect(pane).toContain('fatal: unable to access github.com')
-  expect(pane).toContain('claude plugin marketplace update open-effort && claude plugin update open-effort@open-effort')
+  expect(pane).toContain(`${BIN} plugin marketplace update open-effort && ${BIN} plugin update open-effort@open-effort`)
   expect(pane).not.toContain('Reload now')
 })
 
@@ -233,8 +233,7 @@ function unwrappedButtonRows(node: unknown, found: number[] = []): number[] {
   const kids = Array.isArray(children) ? children.flat(3).filter(Boolean) : []
   const isRow = type === 'Box' && props?.flexDirection !== 'column'
   const buttons = kids.filter(k => (k as { type?: string }).type === 'Button').length
-  const isLabelAndControl = props?.justifyContent === 'space-between' && kids.length === 2
-  if (isRow && kids.length > 1 && buttons > 0 && props?.flexWrap !== 'wrap' && !isLabelAndControl) found.push(kids.length)
+  if (isRow && kids.length > 1 && buttons > 0 && props?.flexWrap !== 'wrap') found.push(kids.length)
   unwrappedButtonRows(children, found)
   return found
 }
@@ -559,3 +558,35 @@ for (const surface of ALL_SURFACES) {
     }
   }
 }
+
+test('once a check finds a new version, Update sits beside the Check button and runs', async ($, on) => {
+  const { ran } = engine(on, { files: INSTALLED, latest: NEWER })
+  await start($)
+  await settle()
+  await pressPane($, 'update-run-here')
+
+  expect(ran.length).toBe(2)
+  await pressPane($, 'update-reload-here')
+})
+
+test('with nothing newer, Updates offers no Update button', async ($, on) => {
+  engine(on, { files: INSTALLED, latest: SAME })
+  await start($)
+  await settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const drawn = JSON.stringify(await ui.drawn())
+  await ui.unmount()
+
+  expect(drawn).not.toContain('update-run-here')
+})
+
+test('a run that cannot start shows the error, twice over the pane, with the command by the binary’s full path', async ($, on) => {
+  engine(on, { files: INSTALLED, latest: NEWER, processes: ['throw'], env: { CLAUDE_CODE_EXECPATH: '/Library/Application Support/claude' } })
+  await start($)
+  await settle()
+  await pressPane($, 'update-run-here')
+
+  const pane = await paneText($)
+  expect(pane.split('"/Library/Application Support/claude" plugin update open-effort@open-effort').length).toBe(3)
+  expect(pane).toContain('could not be run from here (')
+})
