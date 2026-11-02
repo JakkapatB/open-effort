@@ -1230,8 +1230,9 @@ export const register: Register = on => {
         </Box>
       </Box>
     )
+    // Label left and control right; on a narrow pane the control drops below its label.
     const row = (label: string, control: RenderChildren) => (
-      <Box justifyContent="space-between" alignItems="center" gap={1}>
+      <Box justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={1}>
         <Text>{label}</Text>
         {control}
       </Box>

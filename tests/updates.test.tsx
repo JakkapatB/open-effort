@@ -233,8 +233,7 @@ function unwrappedButtonRows(node: unknown, found: number[] = []): number[] {
   const kids = Array.isArray(children) ? children.flat(3).filter(Boolean) : []
   const isRow = type === 'Box' && props?.flexDirection !== 'column'
   const buttons = kids.filter(k => (k as { type?: string }).type === 'Button').length
-  const isLabelAndControl = props?.justifyContent === 'space-between' && kids.length === 2
-  if (isRow && kids.length > 1 && buttons > 0 && props?.flexWrap !== 'wrap' && !isLabelAndControl) found.push(kids.length)
+  if (isRow && kids.length > 1 && buttons > 0 && props?.flexWrap !== 'wrap') found.push(kids.length)
   unwrappedButtonRows(children, found)
   return found
 }
