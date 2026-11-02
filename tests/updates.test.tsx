@@ -70,8 +70,8 @@ test('the switch turns the daily check off and on, kept for the machine', async 
   expect(await paneText($)).toContain('Check for updates daily')
 })
 
-test('a failed read says nothing alarming, keeps the last result, and is tried again next session', async ($, on) => {
-  const { fetched } = engine(on, { files: INSTALLED, latest: 'fail', store: { latestVersion: { at: Date.UTC(2026, 9, 29), version: '0.4.0' } } })
+test('a failed read says nothing alarming, keeps the last result, and is tried again at the next look', async ($, on) => {
+  const { fetched, timers } = engine(on, { files: INSTALLED, latest: 'fail', store: { latestVersion: { at: Date.UTC(2026, 9, 29), version: '0.4.0' } } })
   await start($)
   await settle()
 
@@ -79,6 +79,8 @@ test('a failed read says nothing alarming, keeps the last result, and is tried a
   const pane = await paneText($)
   expect(pane).toContain('0.4.0')
   expect(pane).not.toMatch(/error|failed/i)
+  await tick(timers)
+  expect(fetched.length).toBe(2)
 })
 
 test('a read that never answers holds nothing: the pane draws at once', async ($, on) => {
@@ -111,7 +113,7 @@ async function updateButton($: Parameters<typeof start>[0], surface: (typeof SUR
   const ui = await $.ui.mount({ ...BAND, surface })
   const drawn = JSON.stringify(await ui.drawn())
   await ui.unmount()
-  return /"key":"update","label":"([^"]*)","variant":"primary"/.exec(drawn)?.[1] ?? /"label":"([^"]*)","variant":"primary"/.exec(drawn)?.[1]
+  return /"key":"update","label":"([^"]*)","variant":"primary"/.exec(drawn)?.[1]
 }
 
 /** The timer that looks for a new version comes round. */
@@ -369,6 +371,15 @@ test('once updated, the band’s button says Reload', async ($, on) => {
   expect(await updateButton($)).toBe('↻ Reload')
 })
 
+test('once updated, the band’s button says Reload in Thai', async ($, on) => {
+  engine(on, { files: INSTALLED, latest: NEWER, settings: { language: 'thai' } })
+  await start($)
+  await settle()
+  await pressPane($, 'update-run')
+
+  expect(await updateButton($)).toBe('↻ โหลดใหม่')
+})
+
 test('the band’s button speaks Thai', async ($, on) => {
   engine(on, { files: INSTALLED, latest: NEWER, settings: { language: 'thai' } })
   await start($)
@@ -433,4 +444,61 @@ test('a session started again keeps one timer', async ($, on) => {
   await settle()
 
   expect(timers.length).toBe(1)
+})
+
+test('an open session looks every 30 minutes', async ($, on) => {
+  const { timerPeriods } = engine(on, { files: INSTALLED, latest: SAME })
+  await start($)
+  await settle()
+
+  expect(timerPeriods).toEqual([30 * 60 * 1000])
+})
+
+test('the daily check switched off in another session reaches this one: a tick reads nothing, and the pane says off', async ($, on) => {
+  const { fetched, store, clock, timers } = engine(on, { files: INSTALLED, latest: NEWER, store: { latestVersion: { at: Date.UTC(2026, 9, 31, 6, 0), version: '0.3.0' } } })
+  await start($)
+  await settle()
+  store.set('checkUpdates', false)
+  clock.now += DAY_MS
+  await tick(timers)
+
+  expect(fetched).toEqual([])
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'updates-daily-on' })
+  await ui.unmount()
+  expect(store.get('checkUpdates')).toBe(true)
+})
+
+test('on the terminal the band wraps only with the button, and never adds a blank row', async ($, on) => {
+  const { store, timers } = engine(on, { files: INSTALLED, latest: SAME, store: { latestVersion: { at: Date.UTC(2026, 9, 31, 6, 0), version: '0.3.0' } } })
+  await start($)
+  await settle()
+  const drawnOn = async () => {
+    const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    const drawn = JSON.stringify(await ui.drawn())
+    await ui.unmount()
+    return drawn
+  }
+  expect(await drawnOn()).not.toContain('flexWrap')
+  store.set('latestVersion', { at: Date.UTC(2026, 9, 31, 6, 30), version: '0.4.0' })
+  await tick(timers)
+
+  const withButton = await drawnOn()
+  expect(withButton).toContain('"flexWrap":"wrap"')
+  expect(withButton).not.toContain('"gap"')
+})
+
+test('on the desktop the band’s picture leaves room for the buttons, and its row can wrap', async ($, on) => {
+  engine(on, { files: INSTALLED, latest: NEWER })
+  await start($)
+  await settle()
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: { ...BAND.props, bodyColumns: 60 } })
+  const drawn = JSON.stringify(await ui.drawn())
+  await ui.unmount()
+
+  const width = Number(/"width":(\d+),"height"/.exec(drawn)?.[1])
+  expect(width).toBeGreaterThan(0)
+  expect(width).toBeLessThanOrEqual(60 * 8 - 176)
+  expect(drawn).toContain('"flexWrap":"wrap"')
+  expect(drawn).toContain('"flexShrink":0')
 })

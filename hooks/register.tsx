@@ -251,8 +251,8 @@ async function readLatest($: EngineInterface): Promise<string | null> {
 }
 
 /**
- * Reads the newest version: the daily read as a session starts (`isPressed` false: once in 24 hours, never with the
- * switch off), or at once when the person presses Check. What a read finds is kept with its time; a read that finds
+ * Reads the newest version: the daily read, as a session starts and at each look of an open session (`isPressed`
+ * false: once in 24 hours per machine, never with the switch off), or at once when the person presses Check. What a read finds is kept with its time; a read that finds
  * nothing keeps the last result and is tried again next time.
  */
 async function checkForUpdate($: EngineInterface, isPressed: boolean): Promise<void> {
@@ -261,8 +261,9 @@ async function checkForUpdate($: EngineInterface, isPressed: boolean): Promise<v
   const keptVersion = typeof kept?.version === 'string' ? kept.version : null
   // What another session read reaches this one, as long as it is newer than what this one knows.
   if (keptVersion) await update($, updates, u => (!u.latest || isNewer(keptVersion, u.latest) ? { ...u, latest: keptVersion } : u))
-  // The switch from the store: on a timer this `$` is session.start's, whose atom reads can be stale.
+  // The switch from the store, so that another session's press reaches this one.
   const isDaily = (await $.store.get(STORE_CHECK_UPDATES)) !== false
+  await update($, updates, u => (u.isDaily === isDaily ? u : { ...u, isDaily }))
   const isDue = isPressed || (isDaily && !(typeof kept?.at === 'number' && now - kept.at < CHECK_EVERY_MS))
   if (!isDue) return
   // One read at a time, claimed in the same change that marks it running.
@@ -1061,9 +1062,11 @@ export const register: Register = on => {
     const nextLabel = up.step === 'updated' ? words.pane.bandReload : newerOf(up) ? words.pane.bandUpdate : null
     const updateButton = nextLabel ? <Button key="update" label={nextLabel} variant="primary" onPress={() => openPane($)} /> : null
     const pane = <Button key="pane" label="≡" onPress={() => togglePane($)} />
+    // Only the wider row may wrap, its buttons below the band.
+    const wrapped = updateButton ? ({ flexWrap: 'wrap' } as const) : {}
     if (e.surface === 'terminal' || !('Svg' in table)) {
       return (
-        <Box gap={1} flexWrap="wrap">
+        <Box columnGap={1} {...wrapped}>
           <Text dimColor>{line}</Text>
           {updateButton}
           {pane}
@@ -1075,6 +1078,8 @@ export const register: Register = on => {
     useTheme(picked)
     // The band's cells are about 8 CSS pixels wide on the desktop; leave room for the buttons.
     const room = Math.max(96, e.props.bodyColumns * 8 - (updateButton ? 176 : 64))
+    // The rows with nothing beside them keep the band's whole width.
+    const band = Math.max(160, e.props.bodyColumns * 8)
     const source = t.stage ? 'stage' : t.score && t.effort ? 'score' : 'own'
     const reason = t.score ? words.reason({ kind: 'scored', score: t.score }) : words.reason(why)
     // The task's flow, left to right: what Haiku read (or the stage), then the effort in use, which carries the
@@ -1120,12 +1125,11 @@ export const register: Register = on => {
       steps[i] = { ...st, isNew: isFresh(keys[i] ?? '') }
     })
     const drawn = stepsSvg(steps, room, e.props.isWorking, room)
-    const stages = t.stage ? stageSvg(flow.stages.map(s => s.name), t.stage, room, { isTrackNew: isFresh('track'), isStageNew: isFresh(`stage:${t.stage}`) }) : null
+    const stages = t.stage ? stageSvg(flow.stages.map(s => s.name), t.stage, band - 64, { isTrackNew: isFresh('track'), isStageNew: isFresh(`stage:${t.stage}`) }) : null
     // Sub-agents at work hang off the step at work as one node saying how many; their names follow, wrapping to the
     // band's width: buttons that open each agent's transcript, or labels where the surface cannot open one.
     const ids = await read($, running)
     const atWork = ids.length > 0 ? (await $.agent.list()).filter(a => ids.includes(a.id)) : []
-    const band = room + 64
     const node = atWork.length > 0
       ? agentsSvg(drawn.anchor ?? 16, band - 8, `${words.steps.agents} · ${words.steps.agentsAt(atWork.length)}`, atWork.some(a => isFresh(`agent:${a.id}`)))
       : null
@@ -1149,7 +1153,7 @@ export const register: Register = on => {
       <Box flexDirection="column" gap={1}>
         {stages && <Svg source={stages.source} width={stages.width} height={stages.height} alt={`${flowName}: ${t.stage}`} />}
         <Box flexDirection="column">
-          <Box justifyContent="space-between" alignItems="center" gap={1}>
+          <Box justifyContent="space-between" alignItems="center" columnGap={1} {...wrapped}>
             <Svg source={drawn.source} width={drawn.width} height={drawn.height} alt={line} />
             <Box gap={1} flexShrink={0}>
               {updateButton}

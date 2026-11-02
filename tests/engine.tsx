@@ -117,7 +117,9 @@ export function engine(on: On, options: EngineOptions = {}) {
 
   // A timer waits until a test fires it; one stopped by the mod no longer waits.
   const timers: (() => void)[] = []
-  on('clock.every', async (_, __, next) => {
+  const timerPeriods: number[] = []
+  on('clock.every', async (_, e, next) => {
+    timerPeriods.push(e.ms)
     await new Promise<void>((resolve, reject) => {
       const fire = () => resolve()
       timers.push(fire)
@@ -250,7 +252,7 @@ export function engine(on: On, options: EngineOptions = {}) {
     const context = bash.context.length > 0 ? { context: bash.context } : {}
     return bash.passes ? { result: {}, text: 'ok', ...context } : { result: {}, text: 'Exit code 1', isError: true, ...context }
   })
-  return { sent, asked, submitted, bash, opened, written, clock, calls, viewed, where, store, conversation, fetched, ran, commands, timers }
+  return { sent, asked, submitted, bash, opened, written, clock, calls, viewed, where, store, conversation, fetched, ran, commands, timers, timerPeriods }
 }
 
 export const DAY_MS = 24 * 60 * 60 * 1000

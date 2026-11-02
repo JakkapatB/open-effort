@@ -77,7 +77,7 @@ Nothing to set up: start a new session and the band appears above the prompt.
 
 ### Keep it up to date
 
-Claude Code updates plugins by itself only from Anthropic's own marketplaces, and the desktop app turns that off for every marketplace. So open-effort tells you itself: once a day it checks for a new version, and sessions already open learn of it within 30 minutes. When one is out, the band shows a coloured **↑ Update** button that opens the pane, and the top of the pane shows an **Update now** button. Once updated, the band's button says **↻ Reload**. Updating runs Claude Code's own update; then **Reload now** runs the new version in the session, or start a new one. Where the pane cannot run the update, it shows the command to run instead. The pane's **Updates** section has **Check now** and a switch for the daily check.
+Claude Code updates plugins by itself only from Anthropic's own marketplaces, and the desktop app turns that off for every marketplace. So open-effort tells you itself: once a day it checks for a new version, and sessions already open look every 30 minutes at what was found, so they pick it up by themselves. When one is out, the band shows a coloured **↑ Update** button that opens the pane, and the top of the pane shows an **Update now** button. Once updated, the band's button says **↻ Reload**. Updating runs Claude Code's own update; then **Reload now** runs the new version in the session, or start a new one. Where the pane cannot run the update, it shows the command to run instead. The pane's **Updates** section has **Check now** and a switch for the daily check.
 
 **Or turn on Claude Code's own auto-update, once** (terminal only). In Claude Code in the terminal, run `/plugin`, open **Marketplaces**, pick **open-effort** and choose **Enable auto-update**. Or add this entry inside `~/.claude/settings.json` (next to any `extraKnownMarketplaces` entries already there):
 
@@ -280,7 +280,7 @@ Test, typecheck, build and lint runs (JavaScript/TypeScript, Python, Go, Rust, N
 | `tool.call` on `Bash` | Counts test, lint, build and typecheck runs as passing or failing checks; tells Claude when a stuck task should ask you | Adds context to a failing check's result; the result itself is never changed |
 | `tool.call` on `Read`, `Skill`, `Edit`, `Write` | Notices a stage's skill being used, a ticket being read, a test being written | Nothing |
 | `tool.call` on `mcp__open-effort__stage`, `__model`, `__report` | Answers the mod's own three tools | They are the mod's own tools |
-| `turn.start`, `turn.complete`, `session.start`, `session.end` | Tracks sub-agents at work, the turn's history entry, the project's switches; as a session starts, the daily update check | Nothing |
+| `turn.start`, `turn.complete`, `session.start`, `session.end` | Tracks sub-agents at work, the turn's history entry, the project's switches; the daily update check, as a session starts and every 30 minutes | Nothing |
 | `command.run` on `open-effort` | Answers the mod's own `/open-effort` command: opens the pane, switches the mod, or, with `flow`, sends Claude the prompt to help write the flow file | It is the mod's own command; `flow` starts a turn of its own |
 | `ui.render` | Draws the band above the prompt and the pane | Adds the band and the pane |
 
