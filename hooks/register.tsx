@@ -18,7 +18,7 @@ import {
 import type { FlowModel } from './policy'
 import { SCORE_SYSTEM, SCORE_TIMEOUT_MS, isGoOn, isUnsure, scorePrompt, scoredFrom } from './score'
 import type { Scored } from './score'
-import { CHECK_EVERY_MS, CHECK_TIMEOUT_MS, LOOK_EVERY_MS, RELEASES_URL, UPDATE_COMMAND, UPDATE_STEPS, UPDATE_TIMEOUT_MS, UPDATE_URL, isNewer, newerOf, reasonOf, versionOf } from './update'
+import { CHECK_EVERY_MS, CHECK_TIMEOUT_MS, LOOK_EVERY_MS, RELEASES_URL, UPDATE_STEPS, UPDATE_TIMEOUT_MS, UPDATE_URL, isNewer, newerOf, reasonOf, updateCommand, versionOf } from './update'
 import { clockTime, languageOf, modelName, wordsFor } from './words'
 import type { Why } from './words'
 
@@ -65,7 +65,7 @@ const ticketReads = atom({ plugin: 'open-effort', key: 'ticketReads' } as const,
 // Updates of the mod itself: the daily read's switch, the versions, and the step the pane is at.
 const updates = atom(
   { plugin: 'open-effort', key: 'updates' } as const,
-  { isDaily: true, current: null, latest: null, isChecking: false, isUnreached: false, step: 'idle', reason: null } as UpdateState,
+  { isDaily: true, detail: null, current: null, latest: null, isChecking: false, isUnreached: false, step: 'idle', reason: null } as UpdateState,
 )
 // Whether the surface can put an agent's transcript in view; false once it said it draws no main view. The desktop
 // app never can: its band never offers it.
@@ -298,19 +298,19 @@ async function runUpdate($: EngineInterface): Promise<void> {
     return { ...u, step: 'updating', reason: null }
   })
   if (!isClaimed) return
-  let outcome: Pick<UpdateState, 'step' | 'reason'> = { step: 'updated', reason: null }
+  let outcome: Pick<UpdateState, 'step' | 'reason' | 'detail'> = { step: 'updated', reason: null, detail: null }
   try {
     const bin = (await $.env.get('CLAUDE_CODE_EXECPATH')) || 'claude'
     for (const step of UPDATE_STEPS) {
       const res = await $.process.run([bin, ...step], { timeoutMs: UPDATE_TIMEOUT_MS })
       if (res.exitCode !== 0) {
-        outcome = { step: 'failed', reason: reasonOf(res) }
+        outcome = { step: 'failed', reason: reasonOf(res), detail: null }
         break
       }
     }
-  } catch {
-    // Claude Code could not be run from here.
-    outcome = { step: 'failed', reason: null }
+  } catch (error) {
+    // Claude Code could not be run from here: the error says why.
+    outcome = { step: 'failed', reason: null, detail: error instanceof Error ? error.message.slice(0, 200) : null }
   } finally {
     await update($, updates, (u): UpdateState => ({ ...u, ...outcome }))
   }
@@ -616,7 +616,7 @@ export const register: Register = on => {
     try {
       const isDaily = (await $.store.get(STORE_CHECK_UPDATES)) !== false
       const current = await installedVersion($)
-      await update($, updates, (u): UpdateState => ({ ...u, isDaily, current, isChecking: false, isUnreached: false, step: 'idle', reason: null }))
+      await update($, updates, (u): UpdateState => ({ ...u, isDaily, current, isChecking: false, isUnreached: false, step: 'idle', reason: null, detail: null }))
       // In the background: a slow network never holds the session.
       void checkForUpdate($, false).catch(() => undefined)
       // An open session keeps looking; a session started again keeps one timer.
@@ -1199,6 +1199,15 @@ export const register: Register = on => {
     const used = await read($, flowState)
     const up = await read($, updates)
     const newer = newerOf(up)
+    const command = updateCommand(await $.env.get('CLAUDE_CODE_EXECPATH'))
+    // Shown in the card and beside the button in Updates, so a failure is seen where the person pressed.
+    const failedRows = up.step === 'failed' ? (
+      <Box flexDirection="column">
+        <Text color="#ef4444">{words.updateFailed(up.reason ?? (up.detail ? `${words.cannotRun} (${up.detail})` : words.cannotRun))}</Text>
+        <Text dimColor>{words.runThis}</Text>
+        <Text>{command}</Text>
+      </Box>
+    ) : null
     const status =
       newer ? words.newerOut(newer)
       : up.latest && up.current ? words.upToDate(up.current)
@@ -1277,13 +1286,7 @@ export const register: Register = on => {
                 <Button key="update-run" label={words.updateNow} variant="primary" onPress={() => runUpdate($)} />
               </Box>
             )}
-            {up.step === 'failed' && (
-              <Box flexDirection="column">
-                <Text color="#ef4444">{words.updateFailed(up.reason ?? words.cannotRun)}</Text>
-                <Text dimColor>{words.runThis}</Text>
-                <Text>{UPDATE_COMMAND}</Text>
-              </Box>
-            )}
+            {failedRows}
             <Box flexWrap="wrap" columnGap={1}>
               <Text dimColor>{words.whatChanged}</Text>
               {'Link' in table ? <table.Link href={RELEASES_URL} label={words.releases} /> : <Text>{RELEASES_URL}</Text>}
@@ -1353,7 +1356,11 @@ export const register: Register = on => {
           <Box flexWrap="wrap" alignItems="center" gap={1}>
             {up.isChecking ? <Text dimColor>{words.checking}</Text> : <Button key="update-check" label={words.check} variant="secondary" onPress={() => checkForUpdate($, true)} />}
             <Text dimColor>{status}</Text>
+            {newer && up.step === 'updating' && <Text dimColor>{words.updating}</Text>}
+            {newer && up.step === 'updated' && <Button key="update-reload-here" label={words.reload} variant="primary" onPress={() => reloadPlugins($)} />}
+            {newer && (up.step === 'idle' || up.step === 'failed') && <Button key="update-run-here" label={words.updateNow} variant="primary" onPress={() => runUpdate($)} />}
           </Box>,
+          ...(newer && failedRows ? [failedRows] : []),
           ...(up.isUnreached ? [<Text dimColor>{words.unreached}</Text>] : []),
           row(words.daily, toggle('updates-daily-on', 'updates-daily-off', up.isDaily, value => setDailyCheck($, value))),
           <Text dimColor>{words.dailyNote}</Text>,

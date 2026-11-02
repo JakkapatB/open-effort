@@ -10,8 +10,11 @@ export const UPDATE_STEPS: readonly (readonly string[])[] = [
   ['plugin', 'update', 'open-effort@open-effort'],
 ]
 
-/** The same steps as one shell line, for a machine where the pane cannot run them. */
-export const UPDATE_COMMAND = UPDATE_STEPS.map(step => ['claude', ...step].join(' ')).join(' && ')
+/** The same steps as one shell line, for a machine where the pane cannot run them: by the binary's path when known. */
+export function updateCommand(bin?: string): string {
+  const claude = !bin ? 'claude' : /\s/.test(bin) ? `"${bin}"` : bin
+  return UPDATE_STEPS.map(step => [claude, ...step].join(' ')).join(' && ')
+}
 
 /** How often the daily read runs: once every 24 hours per machine. */
 export const CHECK_EVERY_MS = 24 * 60 * 60 * 1000

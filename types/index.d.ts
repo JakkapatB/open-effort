@@ -135,6 +135,8 @@ export type Switches = { machine: boolean; project: boolean | null; flowMachine:
  */
 export type UpdateState = {
   isDaily: boolean
+  /** What stopped Claude Code from running, as the error said it. */
+  detail: string | null
   current: string | null
   latest: string | null
   isChecking: boolean
