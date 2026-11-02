@@ -1352,14 +1352,19 @@ export const register: Register = on => {
         )}
         {section(
           words.updates,
-          <Text>{words.installed(up.current ?? '-')}</Text>,
-          <Box flexWrap="wrap" alignItems="center" gap={1}>
-            {up.isChecking ? <Text dimColor>{words.checking}</Text> : <Button key="update-check" label={words.check} variant="secondary" onPress={() => checkForUpdate($, true)} />}
-            <Text dimColor>{status}</Text>
-            {newer && up.step === 'updating' && <Text dimColor>{words.updating}</Text>}
-            {newer && up.step === 'updated' && <Button key="update-reload-here" label={words.reload} variant="primary" onPress={() => reloadPlugins($)} />}
-            {newer && (up.step === 'idle' || up.step === 'failed') && <Button key="update-run-here" label={words.updateNow} variant="primary" onPress={() => runUpdate($)} />}
-          </Box>,
+          // Label on the left, its button on the right, in line with the switch below.
+          row(
+            words.installed(up.current ?? '-'),
+            up.isChecking ? <Text dimColor>{words.checking}</Text> : <Button key="update-check" label={words.check} variant="secondary" onPress={() => checkForUpdate($, true)} />,
+          ),
+          newer
+            ? row(
+                status,
+                up.step === 'updating' ? <Text dimColor>{words.updating}</Text>
+                : up.step === 'updated' ? <Button key="update-reload-here" label={words.reload} variant="primary" onPress={() => reloadPlugins($)} />
+                : <Button key="update-run-here" label={words.updateNow} variant="primary" onPress={() => runUpdate($)} />,
+              )
+            : <Text dimColor>{status}</Text>,
           ...(newer && failedRows ? [failedRows] : []),
           ...(up.isUnreached ? [<Text dimColor>{words.unreached}</Text>] : []),
           row(words.daily, toggle('updates-daily-on', 'updates-daily-off', up.isDaily, value => setDailyCheck($, value))),
