@@ -1,6 +1,6 @@
 {
   "name": "open-effort",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "description": "Sets Claude's effort to fit the work in front of it, and moves to a stronger model only when the highest effort is not enough",
   "author": {
     "name": "JakkapatB",
