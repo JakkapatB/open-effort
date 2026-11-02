@@ -18,7 +18,7 @@ import {
 import type { FlowModel } from './policy'
 import { SCORE_SYSTEM, SCORE_TIMEOUT_MS, isGoOn, isUnsure, scorePrompt, scoredFrom } from './score'
 import type { Scored } from './score'
-import { CHECK_EVERY_MS, CHECK_TIMEOUT_MS, LOOK_EVERY_MS, FIND_CLAUDE, RELEASES_URL, UPDATE_PROMPT, UPDATE_STEPS, UPDATE_TIMEOUT_MS, UPDATE_URL, isNewer, newerOf, reasonOf, updateCommand, versionOf } from './update'
+import { CHECK_EVERY_MS, CHECK_TIMEOUT_MS, LOOK_EVERY_MS, FIND_CLAUDE, MANUAL_COMMAND, RELEASES_URL, UPDATE_PROMPT, UPDATE_STEPS, UPDATE_TIMEOUT_MS, UPDATE_URL, isNewer, newerOf, reasonOf, updateCommand, versionOf } from './update'
 import { clockTime, languageOf, modelName, wordsFor } from './words'
 import type { Why } from './words'
 
@@ -312,16 +312,6 @@ async function runUpdate($: EngineInterface): Promise<void> {
   if (!isClaimed) return
   let outcome: Pick<UpdateState, 'step' | 'reason' | 'detail'> = { step: 'updated', reason: null, detail: null }
   try {
-    // Claude Code's own /plugin command, where the session has it: nothing to find on the machine.
-    if ((await $.command.list()).some(c => c.name === 'plugin')) {
-      const said: string[] = []
-      for (const step of UPDATE_STEPS) {
-        const { text } = await $.command.run({ command: 'plugin', args: step.slice(1).join(' ') })
-        if (text) said.push(text)
-      }
-      outcome = { step: 'updated', reason: null, detail: said.join('\n').slice(0, 400) || null }
-      return
-    }
     const bin = await claudeBinary($)
     for (const step of UPDATE_STEPS) {
       const res = await $.process.run([bin, ...step], { timeoutMs: UPDATE_TIMEOUT_MS })
@@ -1228,6 +1218,12 @@ export const register: Register = on => {
     const newer = newerOf(up)
     const command = updateCommand(await $.env.get('CLAUDE_CODE_EXECPATH'))
     // Shown in the card and beside the button in Updates, so a failure is seen where the person pressed.
+    const askedRows = (
+      <Box flexDirection="column">
+        <Text dimColor>{words.updateAsked}</Text>
+        <Text>{MANUAL_COMMAND}</Text>
+      </Box>
+    )
     const failedRows = up.step === 'failed' ? (
       <Box flexDirection="column">
         <Text color="#ef4444">{words.updateFailed(up.reason ?? (up.detail ? `${words.cannotRun} (${up.detail})` : words.cannotRun))}</Text>
@@ -1302,14 +1298,15 @@ export const register: Register = on => {
             {up.step === 'updated' ? (
               <Box flexDirection="column" gap={1}>
                 <Text>{words.updated(newer)}</Text>
-                {up.detail && <Text dimColor>{up.detail}</Text>}
                 <Box flexWrap="wrap" gap={1}>
                   <Button key="update-reload" label={words.reload} variant="primary" onPress={() => reloadPlugins($)} />
                 </Box>
                 <Text dimColor>{words.reloadNote}</Text>
               </Box>
-            ) : up.step === 'updating' || up.step === 'asked' ? (
-              <Text dimColor>{up.step === 'asked' ? words.updateAsked : words.updating}</Text>
+            ) : up.step === 'asked' ? (
+              askedRows
+            ) : up.step === 'updating' ? (
+              <Text dimColor>{words.updating}</Text>
             ) : (
               <Box flexWrap="wrap" gap={1}>
                 <Button key="update-run" label={words.updateNow} variant="primary" onPress={() => runUpdate($)} />
@@ -1389,12 +1386,13 @@ export const register: Register = on => {
           newer
             ? row(
                 status,
-                up.step === 'updating' || up.step === 'asked' ? <Text dimColor>{up.step === 'asked' ? words.updateAsked : words.updating}</Text>
+                up.step === 'asked' || up.step === 'updating' ? <Text dimColor>{words.updating}</Text>
                 : up.step === 'updated' ? <Button key="update-reload-here" label={words.reload} variant="primary" onPress={() => reloadPlugins($)} />
                 : <Button key="update-run-here" label={words.updateNow} variant="primary" onPress={() => runUpdate($)} />,
               )
             : <Text dimColor>{status}</Text>,
           ...(newer && failedRows ? [failedRows] : []),
+          ...(newer && up.step === 'asked' ? [askedRows] : []),
           ...(up.isUnreached ? [<Text dimColor>{words.unreached}</Text>] : []),
           row(words.daily, toggle('updates-daily-on', 'updates-daily-off', up.isDaily, value => setDailyCheck($, value))),
           <Text dimColor>{words.dailyNote}</Text>,
