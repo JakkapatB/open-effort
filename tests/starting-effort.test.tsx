@@ -212,6 +212,7 @@ test('a prompt replaced by a newer one while it waits brings no question', async
   await type($, 'rename a variable')
   await first
 
+  expect(submitted.map(e => e.text).sort()).toEqual(['add coupons to checkout', 'rename a variable'])
   expect(JSON.stringify(submitted.map(e => e.context ?? []))).not.toContain('ask the person once')
 })
 
@@ -274,5 +275,26 @@ test('the mod switched off while a prompt waits brings no question and keeps no 
   await $.command.run({ command: 'open-effort', args: 'off', origin: { kind: 'composer' }, presentation: PRESENTATION })
   await typed
 
+  expect(submitted.map(e => e.text)).toEqual(['add coupons to checkout'])
   expect(JSON.stringify(submitted.at(-1)?.context ?? '')).not.toContain('ask the person once')
+})
+
+test('while a prompt waits, the band says Haiku is reading, and stops once it has', async ($, on) => {
+  engine(on, { haiku: 'clarity=goal hard=no risky=no size=small sure=90', haikuDelayMs: 300 })
+  await start($)
+  const typed = type($, 'add a coupon field')
+  await new Promise(resolve => setTimeout(resolve, 100))
+  expect(await bandText($)).toContain('Haiku is reading')
+  await typed
+
+  expect(await bandText($)).not.toContain('Haiku is reading')
+})
+
+test('a note on a prompt keeps the context another plugin put there', async ($, on) => {
+  const { submitted } = engine(on, { haiku: 'clarity=goal hard=no risky=no size=large sure=90', matt: MATT_SKILLS })
+  await start($)
+  await $.prompt.submit({ text: 'add coupons to checkout', context: ['from another plugin'], wait: false, origin: { kind: 'composer' } })
+
+  expect(submitted.at(-1)?.context).toContain('from another plugin')
+  expect(JSON.stringify(submitted.at(-1)?.context)).toContain('ask the person once')
 })

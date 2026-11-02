@@ -208,8 +208,8 @@ export function engine(on: On, options: EngineOptions = {}) {
   })
   on('model.complete', async (_, e): Promise<{ value: ModelCompleteResult }> => {
     asked.push(e)
-    if (options.haikuDelayMs) await new Promise(resolve => setTimeout(resolve, options.haikuDelayMs))
     const haiku = replies[Math.min(asked.length, replies.length) - 1]
+    if (options.haikuDelayMs) await new Promise(resolve => setTimeout(resolve, options.haikuDelayMs))
     if (haiku === 'throw') throw new Error('network down')
     if (haiku === 'timeout') return { value: { isAnswered: false, reason: 'aborted', usage: USAGE } }
     if (haiku === 'fail') return { value: { isAnswered: false, reason: 'api-error', status: 529, error: 'overloaded', usage: USAGE } }
@@ -224,7 +224,7 @@ export function engine(on: On, options: EngineOptions = {}) {
     return { turnId: e.turnId, index: e.index, answer: '', toolUses: [], stopReason: 'end_turn', usage: null }
   })
   // Bash runs as told: `bash.passes` decides whether the next command exits 0.
-  const bash = { passes: true, notes: [] as string[] }
+  const bash = { passes: true, notes: [] as string[], context: [] as string[] }
   const calls: Record<string, unknown>[] = []
   on('tool.call', (_, e) => {
     calls.push(e as Record<string, unknown>)
@@ -233,7 +233,8 @@ export function engine(on: On, options: EngineOptions = {}) {
       const listed = AGENTS.find(a => a.description === (e as { description?: string }).description)
       return { result: listed ? { agentId: listed.id } : {}, text: 'started' }
     }
-    return bash.passes ? { result: {}, text: 'ok' } : { result: {}, text: 'Exit code 1', isError: true }
+    const context = bash.context.length > 0 ? { context: bash.context } : {}
+    return bash.passes ? { result: {}, text: 'ok', ...context } : { result: {}, text: 'Exit code 1', isError: true, ...context }
   })
   return { sent, asked, submitted, bash, opened, written, clock, calls, viewed, where, store, conversation, fetched, ran, commands }
 }

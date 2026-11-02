@@ -139,6 +139,8 @@ At the top effort of its model the task never moves up by itself. Claude stops a
 
 ### Starting effort
 
+A new request waits for Haiku's reading, usually a few seconds and 15 at most, and the band says so meanwhile. Its first request then goes out at the right effort. If Haiku does not answer in time, the request goes at your session's effort.
+
 | Haiku reads | Effort |
 |---|---|
 | You know what to do and how (a rename, a known pattern) | `low` |
@@ -264,7 +266,7 @@ Test, typecheck, build and lint runs (JavaScript/TypeScript, Python, Go, Rust, N
 - **What it sends, and where.** Apart from the update check, the mod makes no network calls of its own. It sends text to one place: Claude's Haiku model, through Claude Code's own model call (`$.model.complete`), on your account, like any other Claude Code request. It sends:
   - each new request you type, and the last 800 characters of Claude's last message when a task is under way, to read how hard the work is;
   - the text of a ticket file without `Model:` and `Effort:` lines, to read the same for the ticket.
-- **Notes to Claude.** It adds short notes for Claude to the conversation (`$.session.append`, and context on your prompt): to ask you about a stronger model or the flow, how to name a ticket's model and effort, and when to stop and ask you. They go to Claude with the conversation, as your messages do. `/open-effort flow` sends Claude one prompt of its own (`$.prompt.submit`) asking it to help you write the flow file; it names your installed skills and commands.
+- **Notes to Claude.** It adds short notes for Claude as context on your prompt or on a tool's result, never as a message of their own, as those break the prompt cache: to ask you about a stronger model or the flow, how to name a ticket's model and effort, and when to stop and ask you. They go to Claude with the conversation, as your messages do. `/open-effort flow` sends Claude one prompt of its own (`$.prompt.submit`) asking it to help you write the flow file; it names your installed skills and commands.
 - It reads two kinds of file: the project's flow file, `.claude/open-effort.json`, when there is one, and ticket files in the stage that works them (`<feature>/issues/NN-*.md` in the Main Flow, or where your flow's file says). It writes no files: `/open-effort flow` has Claude write the flow file once you agree, as Claude writes any file.
 - It registers three tools of its own, `stage`, `model` and `report`, and the `/open-effort` command.
 

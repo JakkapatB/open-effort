@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, PromptOrigin, PromptSubmitInput, Register, RenderChildren } from 'claude-code'
+import type { EngineInterface, PromptOrigin, Register, RenderChildren } from 'claude-code'
 
 import type { Declined, Effort, Flow, FlowState, HistoryEntry, Language, LanguageChoice, ModelTier, Project, Stage, SubAgent, Switches, Task, TicketSetting, TurnLog, UpdateState } from '../types'
 import { checkRun, isTestFile } from './checks'
@@ -48,7 +48,6 @@ const seenLast = atom({ plugin: 'open-effort', key: 'seenLast' } as const, { sco
 const agents = atom({ plugin: 'open-effort', key: 'agents' } as const, {} as Record<string, SubAgent>)
 // Tickets handed to sub-agents not yet started, by the Agent call's tool_use_id: the ticket and its setting.
 const handed = atom({ plugin: 'open-effort', key: 'handed' } as const, {} as Record<string, { ticket: string } & TicketSetting>)
-// Counts new tasks, so a late score applies only to the task it was asked for.
 // Whether a prompt's score is still on its way: its requests go out at the session's own effort meanwhile.
 const isScoring = atom({ plugin: 'open-effort', key: 'isScoring' } as const, false)
 // The task as it stood when the prompt now being scored was typed: what changed since is kept when the score comes.
@@ -56,7 +55,6 @@ const before = atom({ plugin: 'open-effort', key: 'before' } as const, FRESH_TAS
 // What the person turned down this session: the largest work they chose to do without the Main Flow, and the most
 // capable model they chose not to move to. Neither is asked about again for work no larger.
 const declined = atom({ plugin: 'open-effort', key: 'declined' } as const, { flow: null, model: null } as Declined)
-// Whether the main session's turn is running: a score that comes after it ended sends Claude no questions.
 // How many messages the conversation held when the mod offered a model: the question must come after.
 const offerAt = atom({ plugin: 'open-effort', key: 'offerAt' } as const, 0)
 // Whether the main session wrote a test since its last check: the next failing check is the red step, not a stall.
@@ -346,9 +344,9 @@ async function isFlowInTranscript($: EngineInterface): Promise<boolean> {
   }
 }
 
-/** A prompt with these notes for Claude in its context: they reach the model with it, and no row is added. */
-function withContext(e: PromptSubmitInput, notes: readonly string[]): PromptSubmitInput {
-  return notes.length > 0 ? { ...e, context: [...(e.context ?? []), ...notes] } : e
+/** A prompt or a tool's result with these notes for Claude in its context: they reach the model with it, and no row is added. */
+function withContext<T extends { context?: readonly string[] }>(carrier: T, notes: readonly string[]): T {
+  return notes.length > 0 ? { ...carrier, context: [...(carrier.context ?? []), ...notes] } : carrier
 }
 
 /**
@@ -472,7 +470,7 @@ async function loadProject($: EngineInterface): Promise<void> {
  * the person, and the Main Flow to ask about. A score for a task already replaced by a newer prompt changes nothing.
  */
 async function applyScore($: EngineInterface, scored: Scored, generation: number): Promise<string[]> {
-  if (latestScore !== generation) return []
+  if (scoreGeneration !== generation) return []
   await update($, isScoring, () => false)
   // Switched off while the score was on its way: nothing to apply, nothing to ask.
   if (!(await read($, isOn))) return []
@@ -573,9 +571,9 @@ async function togglePane($: EngineInterface): Promise<void> {
   else await openPane($)
 }
 
-// Which prompt's score counts: the newest. A plain variable, as a hook waiting on Haiku keeps reading what it wrote
-// to an atom itself, and would not see a newer prompt or a new session.
-let latestScore = 0
+// Counts the prompts Haiku was asked to score, and sessions started: only the newest prompt's score counts. A plain
+// variable, as a hook held on Haiku reads atoms as they stood at its last write, not as a newer prompt left them.
+let scoreGeneration = 0
 
 export const register: Register = on => {
   // Once the session has started in its folder: the project, its switches and history, and the language.
@@ -588,7 +586,7 @@ export const register: Register = on => {
     await update($, running, () => [])
     await update($, handed, () => ({}))
     await update($, isScoring, () => false)
-    latestScore += 1
+    scoreGeneration += 1
     await update($, declined, (): Declined => ({ flow: null, model: null }))
     await update($, turnLog, () => EMPTY_TURN)
     await update($, isRed, () => false)
@@ -655,7 +653,7 @@ export const register: Register = on => {
         sessionEffort: await read($, sessionEffort),
         sessionModel: await read($, sessionModel),
         last: await read($, seenLast),
-        scoring: latestScore,
+        scoring: scoreGeneration,
         running: await read($, running),
       },
       null,
@@ -758,17 +756,26 @@ export const register: Register = on => {
     if (e.turnId !== undefined) return next(e)
     // The prompt waits for Haiku, so its first request goes out at the score's effort and its notes go with it. A row
     // appended during a turn would break the prompt cache. The wait ends at SCORE_TIMEOUT_MS, on any failure too.
-    latestScore += 1
-    const generation = latestScore
+    scoreGeneration += 1
+    const generation = scoreGeneration
     await update($, isScoring, () => true)
     // With a task under way, Haiku also reads what Claude said last, to tell an answer or a follow-up (which keeps the
     // task and its climbs) from new work. The task under way holds until the score says which.
     const under = await read($, task)
     await update($, before, () => under)
     const said = under.score !== null || under.effort !== null ? await lastSaid($) : ''
+    try {
+      await update($, seenLast, last => ({ ...last, haikuCalls: (last.haikuCalls ?? 0) + 1 }))
+    } catch {
+      // The report misses one call.
+    }
     // A call that fails is no score, never a rejection: the wait for the score always ends.
     const scored = await scoreRequest($, e.text, said || undefined).catch((): Scored => ({ score: null, outcome: 'error' }))
-    await update($, seenLast, last => ({ ...last, haikuCalls: (last.haikuCalls ?? 0) + 1 }))
+    // The person pressed Esc on the wait: this prompt never started, so the task under way stays as it was.
+    if (next.signal.aborted) {
+      if (scoreGeneration === generation) await update($, isScoring, () => false)
+      return next(e)
+    }
     return next(withContext(e, await applyScore($, scored, generation)))
   }).catch(($, e, next) => next(e))
 
@@ -944,7 +951,7 @@ export const register: Register = on => {
       }
       notes.push(climbOfferNote(modelName(TIER_MODEL[out.offer]), modelName(model)))
     }
-    return notes.length > 0 ? { ...ran, context: [...(ran.context ?? []), ...notes] } : ran
+    return withContext(ran, notes)
   }).catch(($, e, next) => next(e))
 
   // A sub-agent's loop starts and ends: the band counts those at work.
@@ -1036,7 +1043,9 @@ export const register: Register = on => {
       : { kind: 'own' }
     // Fable 5.1 a climb reached is named; a session that runs on Fable from the start shows it as its model.
     const onFable = !!rung?.isFable && (!isFable(model) || isFable(t.climbModel))
-    const line = words.band(rung?.effort ?? null, onFable, why, t.stage, flowName)
+    // A prompt held on Haiku: the band says so, or the wait would look like a freeze.
+    const isReading = await read($, isScoring)
+    const line = isReading ? `open-effort · ${words.steps.reading}` : words.band(rung?.effort ?? null, onFable, why, t.stage, flowName)
     // A newer version of the mod puts a dot on the pane's button: the band itself stays as wide as it was.
     const hasNewer = newerOf(await read($, updates)) !== null
     const pane = <Button key="pane" label={hasNewer ? '≡ ●' : '≡'} onPress={() => togglePane($)} />
@@ -1077,7 +1086,7 @@ export const register: Register = on => {
         ? { title: flowName, value: `${t.stage ?? ''}${t.ticket ? ` · ${words.steps.ticket(t.ticket)}` : ''}`, state: 'done', rank: 1 }
         : t.skill
           ? { title: flow.source === 'matt' ? words.steps.skill : words.steps.flowSkill, value: `${t.skill}${t.score ? ` · ${short(reason)}` : ''}`, state: 'done', rank: 1 }
-          : { title: words.steps.read, value: source === 'score' ? short(reason) : words.steps.noScore, state: source === 'score' ? 'done' : 'idle', rank: 1 },
+          : { title: words.steps.read, value: isReading ? words.steps.reading : source === 'score' ? short(reason) : words.steps.noScore, state: isReading ? 'active' : source === 'score' ? 'done' : 'idle', rank: 1 },
       {
         title: `${words.steps.effort} · ${effortModel}`,
         ...(t.climbed && t.effort ? { aside: words.steps.from(t.effort) } : {}),

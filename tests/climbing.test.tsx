@@ -392,7 +392,7 @@ test('while a new prompt waits for its score, its requests leave the last task�
   await request($, 'high', 0)
   await fail($, bash)
   await request($, 'high', 1)
-  // Another prompt's turn can run while this one waits: a peer's message delivered in the meantime.
+  // Should a request go out while the prompt waits, it leaves the climb aside too.
   const typed = type($, 'now write the README')
   await new Promise(resolve => setTimeout(resolve, 100))
   await request($, 'high', 2)
@@ -486,4 +486,15 @@ test('a stuck task’s offer and the ladder’s end reach Claude with the Bash r
   await fail($, bash)
   expect(bash.notes.join('\n')).toContain('ask the person how to proceed')
   expect(session.appended().length).toBe(0)
+})
+
+test('a note on a Bash result keeps the context another plugin put there', async ($, on) => {
+  const { bash } = engine(on, { haiku: HARD })
+  bash.context = ['from another plugin']
+  await start($)
+  await type($, 'fix the race in the order queue')
+  await fail($, bash)
+
+  expect(bash.notes).toContain('from another plugin')
+  expect(bash.notes.join('\n')).toContain('mcp__open-effort__model')
 })
