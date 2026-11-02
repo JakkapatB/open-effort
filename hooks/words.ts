@@ -101,6 +101,8 @@ export type PaneWords = {
   whatChanged: string
   releases: string
   updateNow: string
+  /** The pane could not run Claude Code, so it asked Claude to. */
+  updateAsked: string
   updating: string
   updated: (version: string) => string
   reload: string
@@ -272,6 +274,7 @@ const EN: Words = {
     whatChanged: 'What changed:',
     releases: 'Releases on GitHub',
     updateNow: 'Update now',
+    updateAsked: 'Claude is updating it in the chat. Start a new session once it is done.',
     updating: 'updating…',
     updated: v => `Updated to ${v}.`,
     reload: 'Reload now',
@@ -363,6 +366,7 @@ const TH: Words = {
     whatChanged: 'เปลี่ยนอะไรบ้าง:',
     releases: 'หน้า Releases บน GitHub',
     updateNow: 'อัปเดตเลย',
+    updateAsked: 'Claude กำลังอัปเดตให้ในแชท พอเสร็จแล้วให้เปิด session ใหม่',
     updating: 'กำลังอัปเดต…',
     updated: v => `อัปเดตเป็น ${v} แล้ว`,
     reload: 'Reload เลย',

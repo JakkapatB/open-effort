@@ -18,7 +18,7 @@ import {
 import type { FlowModel } from './policy'
 import { SCORE_SYSTEM, SCORE_TIMEOUT_MS, isGoOn, isUnsure, scorePrompt, scoredFrom } from './score'
 import type { Scored } from './score'
-import { CHECK_EVERY_MS, CHECK_TIMEOUT_MS, LOOK_EVERY_MS, RELEASES_URL, UPDATE_STEPS, UPDATE_TIMEOUT_MS, UPDATE_URL, isNewer, newerOf, reasonOf, updateCommand, versionOf } from './update'
+import { CHECK_EVERY_MS, CHECK_TIMEOUT_MS, LOOK_EVERY_MS, FIND_CLAUDE, RELEASES_URL, UPDATE_PROMPT, UPDATE_STEPS, UPDATE_TIMEOUT_MS, UPDATE_URL, isNewer, newerOf, reasonOf, updateCommand, versionOf } from './update'
 import { clockTime, languageOf, modelName, wordsFor } from './words'
 import type { Why } from './words'
 
@@ -284,6 +284,18 @@ async function checkForUpdate($: EngineInterface, isPressed: boolean): Promise<v
   }
 }
 
+/** The Claude Code binary to update with: the variable, else what a shell finds, else `claude` on the PATH. */
+async function claudeBinary($: EngineInterface): Promise<string> {
+  const named = await $.env.get('CLAUDE_CODE_EXECPATH')
+  if (named) return named
+  try {
+    const found = await $.process.run(['/bin/sh', '-c', FIND_CLAUDE], { timeoutMs: CHECK_TIMEOUT_MS })
+    return (found.exitCode === 0 && found.stdout.trim()) || 'claude'
+  } catch {
+    return 'claude'
+  }
+}
+
 /**
  * The person pressed Update: Claude Code's own update for the plugin, its steps in order, through the Claude Code
  * binary the session runs on (else `claude` on the PATH). The mod installs nothing itself. A step that fails, or a
@@ -300,7 +312,7 @@ async function runUpdate($: EngineInterface): Promise<void> {
   if (!isClaimed) return
   let outcome: Pick<UpdateState, 'step' | 'reason' | 'detail'> = { step: 'updated', reason: null, detail: null }
   try {
-    const bin = (await $.env.get('CLAUDE_CODE_EXECPATH')) || 'claude'
+    const bin = await claudeBinary($)
     for (const step of UPDATE_STEPS) {
       const res = await $.process.run([bin, ...step], { timeoutMs: UPDATE_TIMEOUT_MS })
       if (res.exitCode !== 0) {
@@ -308,9 +320,14 @@ async function runUpdate($: EngineInterface): Promise<void> {
         break
       }
     }
-  } catch (error) {
-    // Claude Code could not be run from here: the error says why.
-    outcome = { step: 'failed', reason: null, detail: error instanceof Error ? error.message.slice(0, 200) : null }
+  } catch {
+    // Claude Code could not be run from here (a desktop app puts no `claude` on the PATH): Claude's Bash tool can.
+    try {
+      void $.prompt.submit({ text: UPDATE_PROMPT }).catch(() => undefined)
+      outcome = { step: 'asked', reason: null, detail: null }
+    } catch (error) {
+      outcome = { step: 'failed', reason: null, detail: error instanceof Error ? error.message.slice(0, 200) : null }
+    }
   } finally {
     await update($, updates, (u): UpdateState => ({ ...u, ...outcome }))
   }
@@ -1280,8 +1297,8 @@ export const register: Register = on => {
                 </Box>
                 <Text dimColor>{words.reloadNote}</Text>
               </Box>
-            ) : up.step === 'updating' ? (
-              <Text dimColor>{words.updating}</Text>
+            ) : up.step === 'updating' || up.step === 'asked' ? (
+              <Text dimColor>{up.step === 'asked' ? words.updateAsked : words.updating}</Text>
             ) : (
               <Box flexWrap="wrap" gap={1}>
                 <Button key="update-run" label={words.updateNow} variant="primary" onPress={() => runUpdate($)} />
@@ -1361,7 +1378,7 @@ export const register: Register = on => {
           newer
             ? row(
                 status,
-                up.step === 'updating' ? <Text dimColor>{words.updating}</Text>
+                up.step === 'updating' || up.step === 'asked' ? <Text dimColor>{up.step === 'asked' ? words.updateAsked : words.updating}</Text>
                 : up.step === 'updated' ? <Button key="update-reload-here" label={words.reload} variant="primary" onPress={() => reloadPlugins($)} />
                 : <Button key="update-run-here" label={words.updateNow} variant="primary" onPress={() => runUpdate($)} />,
               )
