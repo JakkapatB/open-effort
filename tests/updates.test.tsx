@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import { isNewer } from '../hooks/update'
-import { BAND, DAY_MS, PANE, SURFACES, engine, paneText, pressPane, start } from './engine'
+import { BAND, DAY_MS, MATT_SKILLS, PANE, SURFACES, engine, paneText, pressPane, start, type } from './engine'
 
 const INSTALLED = { '.claude-plugin/plugin.json': JSON.stringify({ name: 'open-effort', version: '0.3.0' }) }
 const NEWER = JSON.stringify({ name: 'open-effort', version: '0.4.0' })
@@ -239,8 +239,8 @@ function unwrappedButtonRows(node: unknown, found: number[] = []): number[] {
   return found
 }
 
-for (const surface of SURFACES) {
-  for (const columns of [30, 60, 120]) {
+for (const surface of ['terminal', 'desktop', 'vscode', 'mobile'] as const) {
+  for (const columns of [20, 30, 60, 120, 200]) {
     for (const [name, processes] of [['the card offering an update', undefined], ['the card after an update', [{ exitCode: 0 }]], ['the card after a failed update', ['throw']]] as const) {
       test(`on ${surface} at ${columns} columns, ${name} wraps every row of buttons`, async ($, on) => {
         engine(on, { files: INSTALLED, latest: NEWER, ...(processes ? { processes } : {}) })
@@ -500,7 +500,6 @@ test('on the desktop the band’s picture leaves room for the buttons, and its r
   expect(width).toBeGreaterThan(0)
   expect(width).toBeLessThanOrEqual(60 * 8 - 176)
   expect(drawn).toContain('"flexWrap":"wrap"')
-  expect(drawn).toContain('"flexShrink":0')
 })
 
 for (const [surface, padding] of [['desktop', 1], ['terminal', 0]] as const) {
@@ -515,4 +514,48 @@ for (const [surface, padding] of [['desktop', 1], ['terminal', 0]] as const) {
     expect(drawn).toContain('"gap":1,"borderStyle":"round"')
     expect(drawn).toContain(`"paddingY":${padding}`)
   })
+}
+
+const ALL_SURFACES = ['terminal', 'desktop', 'vscode', 'mobile'] as const
+const WIDTHS = [12, 20, 30, 40, 60, 80, 120, 200]
+const LANGUAGES = ['english', 'thai']
+
+/** Every Svg's width in a drawn tree. */
+function svgWidths(tree: unknown): number[] {
+  const found: number[] = []
+  const walk = (node: unknown): void => {
+    if (Array.isArray(node)) node.forEach(walk)
+    else if (node && typeof node === 'object') {
+      const { type, props, children } = node as { type?: string; props?: { width?: number }; children?: unknown }
+      if (type === 'Svg' && typeof props?.width === 'number') found.push(props.width)
+      walk(children)
+    }
+  }
+  walk(tree)
+  return found
+}
+
+for (const surface of ALL_SURFACES) {
+  for (const columns of WIDTHS) {
+    for (const language of LANGUAGES) {
+      test(`on ${surface} at ${columns} columns in ${language}, the band with its button fits`, async ($, on) => {
+        engine(on, { files: INSTALLED, latest: NEWER, haiku: 'clarity=goal hard=no risky=no size=large sure=90', matt: MATT_SKILLS, settings: { language } })
+        await start($)
+        await settle()
+        await type($, 'add coupons to checkout')
+        await $.tool.call({ tool: 'mcp__open-effort__stage', stage: 'implement' } as never)
+        const ui = await $.ui.mount({ ...BAND, surface, props: { ...BAND.props, bodyColumns: columns } })
+        const tree = await ui.drawn()
+        await ui.unmount()
+
+        const drawn = JSON.stringify(tree)
+        expect(drawn).toContain('"key":"update"')
+        expect(drawn).toContain('"key":"pane"')
+        expect(drawn).toContain('"flexWrap":"wrap"')
+        const widths = svgWidths(tree)
+        if (surface === 'desktop') expect(widths.length).toBeGreaterThan(0)
+        for (const width of widths) expect(width).toBeLessThanOrEqual(Math.max(columns * 8, 96))
+      })
+    }
+  }
 }

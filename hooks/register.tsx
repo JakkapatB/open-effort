@@ -1062,11 +1062,10 @@ export const register: Register = on => {
     const nextLabel = up.step === 'updated' ? words.pane.bandReload : newerOf(up) ? words.pane.bandUpdate : null
     const updateButton = nextLabel ? <Button key="update" label={nextLabel} variant="primary" onPress={() => openPane($)} /> : null
     const pane = <Button key="pane" label="≡" onPress={() => togglePane($)} />
-    // Only the wider row may wrap, its buttons below the band.
-    const wrapped = updateButton ? ({ flexWrap: 'wrap' } as const) : {}
     if (e.surface === 'terminal' || !('Svg' in table)) {
+      // Only the wider row may wrap, with no blank row between: a terminal's band stays low.
       return (
-        <Box columnGap={1} {...wrapped}>
+        <Box columnGap={1} {...(updateButton ? { flexWrap: 'wrap' as const } : {})}>
           <Text dimColor>{line}</Text>
           {updateButton}
           {pane}
@@ -1153,9 +1152,9 @@ export const register: Register = on => {
       <Box flexDirection="column" gap={1}>
         {stages && <Svg source={stages.source} width={stages.width} height={stages.height} alt={`${flowName}: ${t.stage}`} />}
         <Box flexDirection="column">
-          <Box justifyContent="space-between" alignItems="center" columnGap={1} {...wrapped}>
+          <Box justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={1}>
             <Svg source={drawn.source} width={drawn.width} height={drawn.height} alt={line} />
-            <Box gap={1} flexShrink={0}>
+            <Box flexWrap="wrap" gap={1}>
               {updateButton}
               {pane}
             </Box>
