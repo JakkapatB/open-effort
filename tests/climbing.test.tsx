@@ -121,7 +121,6 @@ for (const command of CHECKS) {
 
 test('the ladder climbs every effort on the model, asks before Fable 5.1, climbs it, then stops and asks', async ($, on) => {
   const { sent, bash, conversation } = engine(on, { haiku: CLEAR })
-  const session = mock.session(on)
   await start($)
   await type($, 'rename getUser to fetchUser')
   for (let i = 0; i < 4; i++) {
@@ -149,7 +148,7 @@ test('the ladder climbs every effort on the model, asks before Fable 5.1, climbs
     ['claude-fable-5-1', 'max'],
     ['claude-fable-5-1', 'max'],
   ])
-  const notes = session.appended().map(row => JSON.stringify(row.message)).filter(text => text.includes('open-effort'))
+  const notes = bash.notes.filter(text => text.includes('open-effort'))
   expect(notes.length).toBe(2)
   expect(notes[0]).toContain('Fable 5.1')
   expect(notes[0]).toContain('mcp__open-effort__model')
@@ -158,14 +157,13 @@ test('the ladder climbs every effort on the model, asks before Fable 5.1, climbs
 
 test('a Sonnet session climbs to Opus 5.5 with the person’s yes, at high, and offers Fable 5.1 at its top', async ($, on) => {
   const { sent, bash, conversation } = engine(on, { haiku: GOAL, model: 'claude-sonnet-5-5' })
-  const session = mock.session(on)
   await start($)
   await type($, 'add a coupon field')
   await request($, 'high', 0, 'claude-sonnet-5-5')
   await fail($, bash)
   await fail($, bash)
   await fail($, bash)
-  expect(JSON.stringify(session.appended().at(-1)?.message)).toContain('Opus 5.5')
+  expect(bash.notes.at(-1)).toContain('Opus 5.5')
   askPerson(conversation)
   await answerOffer($, 'up')
   await request($, 'high', 1, 'claude-sonnet-5-5')
@@ -178,12 +176,11 @@ test('a Sonnet session climbs to Opus 5.5 with the person’s yes, at high, and 
     ['claude-opus-5-5', 'high'],
     ['claude-opus-5-5', 'xhigh'],
   ])
-  expect(JSON.stringify(session.appended().at(-1)?.message)).toContain('Fable 5.1')
+  expect(bash.notes.at(-1)).toContain('Fable 5.1')
 })
 
 test('when the person keeps the model, the task stays on it and its next stall stops and asks, with no second offer', async ($, on) => {
   const { sent, bash, conversation } = engine(on, { haiku: HARD })
-  const session = mock.session(on)
   await start($)
   await type($, 'fix the race in the order queue')
   await fail($, bash)
@@ -194,20 +191,19 @@ test('when the person keeps the model, the task stays on it and its next stall s
 
   expect(JSON.stringify(kept)).toContain('stays on its model')
   expect(sent.at(-1)).toMatchObject({ model: 'claude-opus-5-5', effort: 'xhigh' })
-  const notes = session.appended().map(row => JSON.stringify(row.message)).filter(text => text.includes('open-effort'))
+  const notes = bash.notes.filter(text => text.includes('open-effort'))
   expect(notes.length).toBe(2)
   expect(notes[1]).toContain('ask the person how to proceed')
 })
 
 test('a stall while the offer waits for an answer makes no second offer', async ($, on) => {
   const { bash } = engine(on, { haiku: HARD })
-  const session = mock.session(on)
   await start($)
   await type($, 'fix the race in the order queue')
   await fail($, bash)
   await fail($, bash)
 
-  expect(session.appended().filter(row => JSON.stringify(row.message).includes('mcp__open-effort__model')).length).toBe(1)
+  expect(bash.notes.filter(text => text.includes('mcp__open-effort__model')).length).toBe(1)
 })
 
 test('the person’s yes must come after Claude asked: a climb’s offer is no exception', async ($, on) => {
@@ -268,7 +264,6 @@ test('a task that reached Fable 5.1 stays on it after settling', async ($, on) =
 
 test('a session already on Fable 5.1 climbs to max, then asks the person', async ($, on) => {
   const { sent, bash } = engine(on, { haiku: HARD })
-  const session = mock.session(on)
   await start($)
   await type($, 'fix the race in the order queue')
   await request($, 'high', 0, 'claude-fable-5-1')
@@ -282,7 +277,7 @@ test('a session already on Fable 5.1 climbs to max, then asks the person', async
     ['claude-fable-5-1', 'max'],
     ['claude-fable-5-1', 'max'],
   ])
-  expect(session.appended().filter(row => JSON.stringify(row.message).includes('open-effort')).length).toBe(1)
+  expect(bash.notes.filter(text => text.includes('open-effort')).length).toBe(1)
 })
 
 test('a task with no score climbs from the session’s own effort', async ($, on) => {
@@ -391,17 +386,17 @@ test('a first prompt goes to Haiku alone, with nothing Claude said', async ($, o
 })
 
 test('while a new prompt waits for its score, its requests leave the last task’s climb aside', async ($, on) => {
-  // Each score comes a little after the prompt's grace of 1.2 seconds.
-  const { sent, bash } = engine(on, { haiku: 'clarity=clear hard=no risky=no size=small sure=90', haikuDelayMs: 1300 })
+  const { sent, bash } = engine(on, { haiku: 'clarity=clear hard=no risky=no size=small sure=90', haikuDelayMs: 300 })
   await start($)
   await type($, 'rename getUser to fetchUser')
-  await new Promise(resolve => setTimeout(resolve, 300))
   await request($, 'high', 0)
   await fail($, bash)
   await request($, 'high', 1)
-  await type($, 'now write the README')
+  // Another prompt's turn can run while this one waits: a peer's message delivered in the meantime.
+  const typed = type($, 'now write the README')
+  await new Promise(resolve => setTimeout(resolve, 100))
   await request($, 'high', 2)
-  await new Promise(resolve => setTimeout(resolve, 300))
+  await typed
   await request($, 'high', 3)
 
   expect(sent.map(e => e.effort)).toEqual(['low', 'medium', 'high', 'low'])
@@ -453,7 +448,6 @@ test('a climb made before the person switched to a model without xhigh goes out 
 
 test('the ladder’s end stops and asks again after a pass, and the band no longer says stopped', async ($, on) => {
   const { bash } = engine(on, { haiku: 'timeout', model: 'claude-fable-5-1' })
-  const session = mock.session(on)
   await start($)
   await type($, 'fix the race in the cart lock')
   await request($, 'max', 0, 'claude-fable-5-1')
@@ -463,7 +457,7 @@ test('the ladder’s end stops and asks again after a pass, and the band no long
   expect(await bandText($)).not.toContain('Claude will ask you')
   await fail($, bash)
 
-  const notes = session.appended().map(row => JSON.stringify(row.message)).filter(text => text.includes('Stop retrying'))
+  const notes = bash.notes.filter(text => text.includes('Stop retrying'))
   expect(notes.length).toBe(2)
 })
 
@@ -477,4 +471,19 @@ test('a test written just before a failing run is the red step, not a stall', as
   await request($, 'high', 1)
 
   expect(sent.map(e => e.effort)).toEqual(['low', 'low'])
+})
+
+test('a stuck task’s offer and the ladder’s end reach Claude with the Bash result, and append no row', async ($, on) => {
+  const { bash, conversation } = engine(on, { haiku: HARD })
+  const session = mock.session(on)
+  await start($)
+  await type($, 'fix the race in the order queue')
+  await request($, 'high', 0)
+  await fail($, bash)
+  expect(bash.notes.join('\n')).toContain('mcp__open-effort__model')
+  askPerson(conversation)
+  await answerOffer($, 'keep')
+  await fail($, bash)
+  expect(bash.notes.join('\n')).toContain('ask the person how to proceed')
+  expect(session.appended().length).toBe(0)
 })

@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, PromptOrigin, Register, RenderChildren } from 'claude-code'
+import type { EngineInterface, PromptOrigin, PromptSubmitInput, Register, RenderChildren } from 'claude-code'
 
 import type { Declined, Effort, Flow, FlowState, HistoryEntry, Language, LanguageChoice, ModelTier, Project, Stage, SubAgent, Switches, Task, TicketSetting, TurnLog, UpdateState } from '../types'
 import { checkRun, isTestFile } from './checks'
@@ -16,7 +16,7 @@ import {
   isSizeAtMost, isTierAtMost, largerSize, ticketLinesOf, tierOf,
 } from './policy'
 import type { FlowModel } from './policy'
-import { SCORE_GRACE_MS, SCORE_SYSTEM, SCORE_TIMEOUT_MS, isGoOn, isUnsure, scorePrompt, scoredFrom } from './score'
+import { SCORE_SYSTEM, SCORE_TIMEOUT_MS, isGoOn, isUnsure, scorePrompt, scoredFrom } from './score'
 import type { Scored } from './score'
 import { CHECK_EVERY_MS, CHECK_TIMEOUT_MS, RELEASES_URL, UPDATE_COMMAND, UPDATE_STEPS, UPDATE_TIMEOUT_MS, UPDATE_URL, newerOf, reasonOf, versionOf } from './update'
 import { clockTime, languageOf, modelName, wordsFor } from './words'
@@ -49,7 +49,6 @@ const agents = atom({ plugin: 'open-effort', key: 'agents' } as const, {} as Rec
 // Tickets handed to sub-agents not yet started, by the Agent call's tool_use_id: the ticket and its setting.
 const handed = atom({ plugin: 'open-effort', key: 'handed' } as const, {} as Record<string, { ticket: string } & TicketSetting>)
 // Counts new tasks, so a late score applies only to the task it was asked for.
-const scoring = atom({ plugin: 'open-effort', key: 'scoring' } as const, 0)
 // Whether a prompt's score is still on its way: its requests go out at the session's own effort meanwhile.
 const isScoring = atom({ plugin: 'open-effort', key: 'isScoring' } as const, false)
 // The task as it stood when the prompt now being scored was typed: what changed since is kept when the score comes.
@@ -58,7 +57,6 @@ const before = atom({ plugin: 'open-effort', key: 'before' } as const, FRESH_TAS
 // capable model they chose not to move to. Neither is asked about again for work no larger.
 const declined = atom({ plugin: 'open-effort', key: 'declined' } as const, { flow: null, model: null } as Declined)
 // Whether the main session's turn is running: a score that comes after it ended sends Claude no questions.
-const isTurnRunning = atom({ plugin: 'open-effort', key: 'isTurnRunning' } as const, false)
 // How many messages the conversation held when the mod offered a model: the question must come after.
 const offerAt = atom({ plugin: 'open-effort', key: 'offerAt' } as const, 0)
 // Whether the main session wrote a test since its last check: the next failing check is the red step, not a stall.
@@ -348,20 +346,25 @@ async function isFlowInTranscript($: EngineInterface): Promise<boolean> {
   }
 }
 
+/** A prompt with these notes for Claude in its context: they reach the model with it, and no row is added. */
+function withContext(e: PromptSubmitInput, notes: readonly string[]): PromptSubmitInput {
+  return notes.length > 0 ? { ...e, context: [...(e.context ?? []), ...notes] } : e
+}
+
 /**
  * A Main Flow stage was started: the task takes the stage's effort. The person's own stage command may start the
  * flow; Claude's stage tool may start it after the mod asked the person about it, or to bring back a flow the
  * conversation shows under way (a resumed session). Only those two move a task between stages. Nothing moves while
- * the mod or the Main Flow is off.
+ * the mod or the Main Flow is off. Its notes are for the caller to send with what it is already sending.
  */
-async function moveToStage($: EngineInterface, stage: Stage, by: StageMover): Promise<true | 'off' | 'not-invited'> {
-  if (!(await read($, isOn)) || !(await isFlowAvailable($))) return 'off'
+async function moveToStage($: EngineInterface, stage: Stage, by: StageMover): Promise<{ outcome: true | 'off' | 'not-invited'; notes: string[] }> {
+  if (!(await read($, isOn)) || !(await isFlowAvailable($))) return { outcome: 'off', notes: [] }
   const t = await read($, task)
-  if (t.stage === stage) return true
-  if (t.stage === null && by === 'tool' && !t.isFlowInvited && !(await isFlowInTranscript($))) return 'not-invited'
+  if (t.stage === stage) return { outcome: true, notes: [] }
+  if (t.stage === null && by === 'tool' && !t.isFlowInvited && !(await isFlowInTranscript($))) return { outcome: 'not-invited', notes: [] }
   const flow = await flowOf($)
   const effort = stageEffort(flow, stage)
-  if (!effort) return 'off'
+  if (!effort) return { outcome: 'off', notes: [] }
   // Entering the flow moves the task to the model picked for it (the frontier model by default), never down.
   const moveTo = t.stage === null ? flowModelFor(await read($, flowModel), taskModel(t, await read($, sessionModel))) : null
   await setTask($, (current): Task => ({
@@ -374,8 +377,7 @@ async function moveToStage($: EngineInterface, stage: Stage, by: StageMover): Pr
     ...(t.stage === null && by === 'person' ? [flowStartedNote(flow, stage)] : []),
     ...(stage === flow.tickets?.write ? [ticketNote(flow)] : stage === flow.tickets?.work ? [IMPLEMENT_NOTE] : []),
   ]
-  for (const note of notes) await $.session.append({ message: { type: 'user', content: [{ type: 'text', text: note }] } })
-  return true
+  return { outcome: true, notes }
 }
 
 /**
@@ -470,7 +472,7 @@ async function loadProject($: EngineInterface): Promise<void> {
  * the person, and the Main Flow to ask about. A score for a task already replaced by a newer prompt changes nothing.
  */
 async function applyScore($: EngineInterface, scored: Scored, generation: number): Promise<string[]> {
-  if ((await read($, scoring)) !== generation) return []
+  if (latestScore !== generation) return []
   await update($, isScoring, () => false)
   // Switched off while the score was on its way: nothing to apply, nothing to ask.
   if (!(await read($, isOn))) return []
@@ -571,6 +573,10 @@ async function togglePane($: EngineInterface): Promise<void> {
   else await openPane($)
 }
 
+// Which prompt's score counts: the newest. A plain variable, as a hook waiting on Haiku keeps reading what it wrote
+// to an atom itself, and would not see a newer prompt or a new session.
+let latestScore = 0
+
 export const register: Register = on => {
   // Once the session has started in its folder: the project, its switches and history, and the language.
   on('session.start', async ($, e, next) => {
@@ -582,7 +588,7 @@ export const register: Register = on => {
     await update($, running, () => [])
     await update($, handed, () => ({}))
     await update($, isScoring, () => false)
-    await update($, scoring, n => n + 1)
+    latestScore += 1
     await update($, declined, (): Declined => ({ flow: null, model: null }))
     await update($, turnLog, () => EMPTY_TURN)
     await update($, isRed, () => false)
@@ -649,7 +655,7 @@ export const register: Register = on => {
         sessionEffort: await read($, sessionEffort),
         sessionModel: await read($, sessionModel),
         last: await read($, seenLast),
-        scoring: await read($, scoring),
+        scoring: latestScore,
         running: await read($, running),
       },
       null,
@@ -696,10 +702,10 @@ export const register: Register = on => {
     const names = (await flowOf($)).stages.map(s => s.name)
     const stage = names.find(s => s === named)
     if (!stage) return { result: `open-effort: the stage must be one of ${names.join(', ')}, or done.` }
-    const moved = await moveToStage($, stage, 'tool')
+    const { outcome: moved, notes } = await moveToStage($, stage, 'tool')
     return {
       result:
-        moved === true ? `open-effort: stage ${stage}; requests go out at its effort.`
+        moved === true ? [`open-effort: stage ${stage}; requests go out at its effort.`, ...notes].join('\n\n')
         : moved === 'off' ? 'open-effort: the flow is off, its file has a problem, or its skills are missing, so the stage changes nothing.'
         : 'open-effort: this task was not sent into the flow, so the stage changes nothing.',
     }
@@ -739,48 +745,31 @@ export const register: Register = on => {
     const flow = await flowOf($)
     // A stage command the person types starts its stage, and the flow with it (Matt's tdd only inside the flow).
     const typed = e.command && isPerson(e.origin) ? stageOfSkill(flow, e.command.name) : null
-    if (typed && e.command && (startsFlow(flow, e.command.name) || (await read($, task)).stage !== null)) await moveToStage($, typed, 'person')
+    const stageNotes = typed && e.command && (startsFlow(flow, e.command.name) || (await read($, task)).stage !== null) ? (await moveToStage($, typed, 'person')).notes : []
     // A command typed with words after it (`/fix-bug the cart total`) asks for work like a prompt; one alone, or the
     // mod's own, or a stage's, keeps the task under way.
     const isCommandWork = !!e.command && !typed && e.command.name !== 'open-effort' && e.command.args.trim() !== ''
-    if (e.isMeta || (e.command && !isCommandWork) || !isPerson(e.origin) || !e.text.trim() || isGoOn(e.text) || !(await read($, isOn))) return next(e)
+    if (e.isMeta || (e.command && !isCommandWork) || !isPerson(e.origin) || !e.text.trim() || isGoOn(e.text) || !(await read($, isOn))) return next(withContext(e, stageNotes))
     // Inside the flow, what the person types is part of it: no new task, no score. In its last stage (Matt's retro), a
     // reply to it keeps the flow and new work ends it, as the score says.
     const inStage = (await read($, task)).stage
     if (inStage !== null && inStage !== lastStage(flow)) return next(e)
     // Typed over a running turn: part of the task under way, not a new one.
     if (e.turnId !== undefined) return next(e)
-    // The prompt does not wait for Haiku: its requests go out at the session's effort until the score comes. A score
-    // back within a moment still brings its notes with the prompt; a later one sends them as a row Claude reads next.
-    const generation = (await read($, scoring)) + 1
-    await update($, scoring, () => generation)
+    // The prompt waits for Haiku, so its first request goes out at the score's effort and its notes go with it. A row
+    // appended during a turn would break the prompt cache. The wait ends at SCORE_TIMEOUT_MS, on any failure too.
+    latestScore += 1
+    const generation = latestScore
     await update($, isScoring, () => true)
     // With a task under way, Haiku also reads what Claude said last, to tell an answer or a follow-up (which keeps the
     // task and its climbs) from new work. The task under way holds until the score says which.
     const under = await read($, task)
     await update($, before, () => under)
     const said = under.score !== null || under.effort !== null ? await lastSaid($) : ''
-    await update($, seenLast, last => ({ ...last, haikuCalls: (last.haikuCalls ?? 0) + 1 }))
     // A call that fails is no score, never a rejection: the wait for the score always ends.
-    const scored = scoreRequest($, e.text, said || undefined).catch((): Scored => ({ score: null, outcome: 'error' }))
-    const early = await Promise.race([scored, $.clock.sleep(SCORE_GRACE_MS).then(() => null)])
-    if (early) {
-      const notes = await applyScore($, early, generation)
-      return notes.length > 0 ? next({ ...e, context: [...(e.context ?? []), ...notes] }) : next(e)
-    }
-    void scored
-      .then(async late => {
-        const notes = await applyScore($, late, generation)
-        if (notes.length === 0) return
-        // The turn the prompt started already ended: a question now would land on the next, unrelated request.
-        if (!(await read($, isTurnRunning))) {
-          await setTask($, (t): Task => ({ ...t, modelOffer: null, isFlowInvited: false }))
-          return
-        }
-        await $.session.append({ message: { type: 'user', content: [{ type: 'text', text: notes.join('\n\n') }] } })
-      })
-      .catch(() => undefined)
-    return next(e)
+    const scored = await scoreRequest($, e.text, said || undefined).catch((): Scored => ({ score: null, outcome: 'error' }))
+    await update($, seenLast, last => ({ ...last, haikuCalls: (last.haikuCalls ?? 0) + 1 }))
+    return next(withContext(e, await applyScore($, scored, generation)))
   }).catch(($, e, next) => next(e))
 
   // The session ends: so does its task.
@@ -943,7 +932,7 @@ export const register: Register = on => {
     const out = afterCheck(await read($, task), ran.isError !== true, own, model)
     await setTask($, () => out.task)
     if (out.hasClimbed) await update($, turnLog, (log): TurnLog => ({ ...log, climbs: log.climbs + 1 }))
-    if (out.hasReachedLadderEnd) await $.session.append({ message: { type: 'user', content: [{ type: 'text', text: LADDER_END_NOTE }] } })
+    const notes = out.hasReachedLadderEnd ? [LADDER_END_NOTE] : []
     // At the top effort of its model the task moves one family up only on the person's yes: Claude stops and asks.
     if (out.offer) {
       await update($, offerAt, () => 0)
@@ -953,15 +942,14 @@ export const register: Register = on => {
       } catch {
         // Any question asked counts.
       }
-      await $.session.append({ message: { type: 'user', content: [{ type: 'text', text: climbOfferNote(modelName(TIER_MODEL[out.offer]), modelName(model)) }] } })
+      notes.push(climbOfferNote(modelName(TIER_MODEL[out.offer]), modelName(model)))
     }
-    return ran
+    return notes.length > 0 ? { ...ran, context: [...(ran.context ?? []), ...notes] } : ran
   }).catch(($, e, next) => next(e))
 
   // A sub-agent's loop starts and ends: the band counts those at work.
   on('turn.start', async ($, e, next) => {
     const res = await next(e)
-    if (e.agentId === undefined) await update($, isTurnRunning, () => true)
     const id = e.agentId
     if (id !== undefined) {
       await update($, running, ids => (ids.includes(id) ? ids : [...ids, id]))
@@ -986,7 +974,6 @@ export const register: Register = on => {
       await update($, seen, before => Object.fromEntries(Object.entries(before).filter(([key]) => key !== `agent:${done}`)))
       return res
     }
-    await update($, isTurnRunning, () => false)
     const ended = await read($, task)
     const entry = entryOf(ended, await read($, turnLog), await $.clock.now())
     await update($, turnLog, () => EMPTY_TURN)

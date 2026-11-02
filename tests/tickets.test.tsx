@@ -23,7 +23,7 @@ async function implementing($: Engine) {
   await start($)
   await request($, 'high', 0)
   await type($, 'add coupons to checkout')
-  await stage($, 'implement')
+  return stage($, 'implement')
 }
 
 /** One request of a sub-agent's loop, on the model and effort its Agent call gave it. */
@@ -39,21 +39,20 @@ test('the tickets stage asks Claude to name each ticket’s model and effort', a
   const session = mock.session(on)
   await start($)
   await type($, 'add coupons to checkout')
-  await stage($, 'tickets')
+  const said = JSON.stringify(await stage($, 'tickets'))
 
-  const notes = session.appended().map(row => JSON.stringify(row.message)).filter(m => m.includes('open-effort'))
-  expect(notes.length).toBe(1)
-  expect(notes[0]).toContain('Model:')
-  expect(notes[0]).toContain('Effort:')
+  expect(said).toContain('Model:')
+  expect(said).toContain('Effort:')
+  expect(session.appended().length).toBe(0)
 })
 
 test('the implement stage tells Claude to read a ticket and to name it when handing it on', async ($, on) => {
   engine(on, { haiku: LARGE, matt: MATT_SKILLS })
   const session = mock.session(on)
-  await implementing($)
+  const said = JSON.stringify(await implementing($))
 
-  const notes = session.appended().map(row => JSON.stringify(row.message)).join('\n')
-  expect(notes).toContain('file path in the Agent prompt')
+  expect(said).toContain('file path in the Agent prompt')
+  expect(session.appended().length).toBe(0)
 })
 
 test('Claude working a ticket itself takes its effort and keeps the task’s model', async ($, on) => {

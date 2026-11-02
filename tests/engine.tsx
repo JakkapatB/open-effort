@@ -109,7 +109,7 @@ export function engine(on: On, options: EngineOptions = {}) {
   // The clock stands still until a test moves it: 31 October 2026, 07:00 UTC.
   const clock = { now: Date.UTC(2026, 9, 31, 7, 0) }
   on('clock.now', () => ({ value: clock.now }))
-  // A wait takes real time, as it does in the app: a score that comes within the prompt's grace still goes with it.
+  // A wait takes real time, as it does in the app.
   on('clock.sleep', async (_, e) => {
     await new Promise(resolve => setTimeout(resolve, options.isQuick ? e.ms / 100 : e.ms))
     return { value: undefined }
@@ -224,7 +224,7 @@ export function engine(on: On, options: EngineOptions = {}) {
     return { turnId: e.turnId, index: e.index, answer: '', toolUses: [], stopReason: 'end_turn', usage: null }
   })
   // Bash runs as told: `bash.passes` decides whether the next command exits 0.
-  const bash = { passes: true }
+  const bash = { passes: true, notes: [] as string[] }
   const calls: Record<string, unknown>[] = []
   on('tool.call', (_, e) => {
     calls.push(e as Record<string, unknown>)
@@ -282,14 +282,15 @@ export async function pressPane($: Engine, key: string) {
   await ui.unmount()
 }
 
-/** Claude runs a command in Bash, which passes or fails as told; `agentId` runs it in a sub-agent. */
-export async function run($: Engine, bash: { passes: boolean }, command: string, passes: boolean, agentId?: string) {
+/** Claude runs a command in Bash, which passes or fails as told; `agentId` runs it in a sub-agent. What the mod tells Claude with the result lands in `bash.notes`. */
+export async function run($: Engine, bash: { passes: boolean; notes: string[] }, command: string, passes: boolean, agentId?: string) {
   bash.passes = passes
-  await $.tool.call({ tool: 'Bash', command, ...(agentId ? { agentId } : {}) })
+  const ran = await $.tool.call({ tool: 'Bash', command, ...(agentId ? { agentId } : {}) })
+  bash.notes.push(...((ran as { context?: readonly string[] }).context ?? []))
 }
 
 /** The same check failing `times` times in a row. */
-export async function fail($: Engine, bash: { passes: boolean }, times = 3, command = 'npm test', agentId?: string) {
+export async function fail($: Engine, bash: { passes: boolean; notes: string[] }, times = 3, command = 'npm test', agentId?: string) {
   for (let i = 0; i < times; i++) await run($, bash, command, false, agentId)
 }
 

@@ -109,10 +109,10 @@ test('a project’s flow writes tickets where its file says, and works them on t
   const session = mock.session(on)
   await start($)
   await type($, 'add a login page with tests')
-  await stage($, 'tasks')
-  const written = session.appended().map(row => JSON.stringify(row.message)).join('\n')
+  const written = JSON.stringify(await stage($, 'tasks'))
   expect(written).toContain('Model:')
   expect(written).toContain('docs/tasks/*.md')
+  expect(session.appended().length).toBe(0)
 
   await stage($, 'build')
   await $.tool.call({ tool: 'Read', file_path: `/work/app/${T2}` } as never)

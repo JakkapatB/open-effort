@@ -405,12 +405,13 @@ test('switching the mod off and on again does not bring back the old task', asyn
 })
 
 test('a flow the person starts with a stage command tells Claude how to leave it', async ($, on) => {
-  await flow(on)
+  const { submitted } = await flow(on)
   const session = mock.session(on)
   await start($)
   await $.prompt.submit({ text: '/mattpocock-skills:code-review', command: { name: 'mattpocock-skills:code-review', args: '' }, wait: false, origin: { kind: 'composer' } })
 
-  const notes = session.appended().map(row => JSON.stringify(row.message)).join('\n')
+  expect(session.appended().length).toBe(0)
+  const notes = JSON.stringify(submitted.at(-1)?.context ?? '')
   expect(notes).toContain('mcp__open-effort__stage')
   expect(notes).toContain('done')
 })
@@ -454,11 +455,11 @@ test('work the person chose to do without the flow is not asked about again this
 })
 
 test('a flow the person starts while a score is on its way stays when the score comes', async ($, on) => {
-  const { sent } = await flow(on, { haiku: 'clarity=clear hard=no risky=no size=small sure=90', haikuDelayMs: 1300 })
+  const { sent } = await flow(on, { haiku: 'clarity=clear hard=no risky=no size=small sure=90', haikuDelayMs: 300 })
   await start($)
-  await type($, 'rename a variable')
+  const typed = type($, 'rename a variable')
   await $.prompt.submit({ text: '/mattpocock-skills:to-spec', command: { name: 'mattpocock-skills:to-spec', args: '' }, wait: false, origin: { kind: 'composer' } })
-  await new Promise(resolve => setTimeout(resolve, 300))
+  await typed
 
   expect(await effortNow($, sent)).toBe('high')
   expect(await bandText($)).toContain('Main Flow: spec')

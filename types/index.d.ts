@@ -198,7 +198,6 @@ declare module 'claude-code' {
       /** Tickets handed to sub-agents not yet started, by the Agent call's tool_use_id. */
       handed: Record<string, { ticket: string } & TicketSetting>
       /** Counts new tasks, so a late score applies only to the task it was asked for. */
-      scoring: number
       /** Whether the surface can put an agent's transcript in view; false once it said it draws no main view. */
       canView: boolean
       /** Whether a prompt's score is still on its way: its requests go out at the session's own effort meanwhile. */
@@ -208,7 +207,6 @@ declare module 'claude-code' {
       /** What the person turned down this session: the flow for work of a size, a model. */
       declined: Declined
       /** Whether the main session's turn is running. */
-      isTurnRunning: boolean
       /** How many messages the conversation held when the mod offered a model. */
       offerAt: number
       /** Whether the main session wrote a test since its last check. */

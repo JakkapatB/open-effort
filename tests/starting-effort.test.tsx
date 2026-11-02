@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'claude-code/testing'
 
-import { MATT_SKILLS, bandText, engine, fail, finish, request, start, type } from './engine'
+import { MATT_SKILLS, PRESENTATION, bandText, engine, fail, request, start, type } from './engine'
 
 const SCORES = [
   ['a clear plan starts at low', 'clarity=clear hard=no risky=no size=small', 'low'],
@@ -145,38 +145,74 @@ test('a reading Haiku is unsure of never starts below medium, and says so', asyn
   expect(await bandText($)).toContain('unsure')
 })
 
-test('the prompt does not wait for a slow score; its requests take the score once it comes', async ($, on) => {
-  const { sent } = engine(on, { haiku: 'clarity=goal hard=no risky=no size=small sure=90', haikuDelayMs: 1500 })
+test('the prompt waits for a slow score, so its first request goes out at the score’s effort', async ($, on) => {
+  const { sent, submitted } = engine(on, { haiku: 'clarity=goal hard=no risky=no size=small sure=90', haikuDelayMs: 1500 })
+  await start($)
+  const typed = type($, 'add a coupon field')
+  await new Promise(resolve => setTimeout(resolve, 300))
+  expect(submitted.length).toBe(0)
+  await typed
+  expect(submitted.length).toBe(1)
+  await request($, 'high', 0)
+
+  expect(sent.map(e => e.effort)).toEqual(['medium'])
+})
+
+test('a slow score sends its question for Claude with the prompt, and appends no row', async ($, on) => {
+  const { submitted } = engine(on, { haiku: 'clarity=goal hard=no risky=no size=large sure=90', haikuDelayMs: 1500, matt: MATT_SKILLS })
+  const session = mock.session(on)
+  await start($)
+  await type($, 'add coupons to checkout')
+
+  expect(JSON.stringify(submitted.at(-1)?.context ?? '')).toContain('ask the person once')
+  expect(session.appended().length).toBe(0)
+})
+
+test('a slow score’s offer of a stronger model goes with the prompt, and appends no row', async ($, on) => {
+  const { submitted } = engine(on, { haiku: 'clarity=goal hard=yes risky=no size=small model=opus sure=90', haikuDelayMs: 1500, model: 'claude-sonnet-5-5' })
+  const session = mock.session(on)
+  await start($)
+  await type($, 'fix the race in the order queue')
+
+  expect(JSON.stringify(submitted.at(-1)?.context ?? '')).toContain('Opus 5.5')
+  expect(session.appended().length).toBe(0)
+})
+
+for (const haiku of ['timeout', 'fail', 'throw'] as const) {
+  test(`a Haiku call that ends in ${haiku} sends the prompt with no question`, async ($, on) => {
+    const { sent, submitted } = engine(on, { haiku, matt: MATT_SKILLS })
+    await start($)
+    await type($, 'add coupons to checkout')
+    await request($, 'high', 0)
+
+    expect(submitted.at(-1)?.text).toBe('add coupons to checkout')
+    expect(submitted.at(-1)?.context ?? []).toEqual([])
+    expect(sent.map(e => e.effort)).toEqual(['high'])
+  })
+}
+
+test('a reply Haiku does not read goes at once, with a slow Haiku', async ($, on) => {
+  const { submitted, asked } = engine(on, { haiku: 'clarity=goal hard=no risky=no size=small sure=90', haikuDelayMs: 1500 })
   await start($)
   await type($, 'add a coupon field')
-  await request($, 'high', 0)
-  await new Promise(resolve => setTimeout(resolve, 1700))
-  await request($, 'high', 1)
+  const count = asked.length
+  const at = Date.now()
+  await type($, 'ok')
 
-  expect(sent.map(e => e.effort)).toEqual(['high', 'medium'])
+  expect(asked.length).toBe(count)
+  expect(submitted.length).toBe(2)
+  expect(Date.now() - at).toBeLessThan(500)
 })
 
-test('a slow score sends its question for Claude as a row once it comes', async ($, on) => {
-  engine(on, { haiku: 'clarity=goal hard=no risky=no size=large sure=90', haikuDelayMs: 1500, matt: MATT_SKILLS })
-  const session = mock.session(on)
+test('a prompt replaced by a newer one while it waits brings no question', async ($, on) => {
+  const { submitted } = engine(on, { haiku: ['clarity=goal hard=no risky=no size=large sure=90', 'clarity=clear hard=no risky=no size=small sure=90'], haikuDelayMs: 300, matt: MATT_SKILLS })
   await start($)
-  await type($, 'add coupons to checkout')
-  await $.turn.start({ text: 'add coupons to checkout', turnId: 't1' })
-  await new Promise(resolve => setTimeout(resolve, 1700))
+  const first = type($, 'add coupons to checkout')
+  await new Promise(resolve => setTimeout(resolve, 100))
+  await type($, 'rename a variable')
+  await first
 
-  expect(session.appended().map(row => JSON.stringify(row.message)).join('\n')).toContain('ask the person once')
-})
-
-test('a slow score that comes after the turn ended sends no question', async ($, on) => {
-  engine(on, { haiku: 'clarity=goal hard=no risky=no size=large sure=90', haikuDelayMs: 1500, matt: MATT_SKILLS })
-  const session = mock.session(on)
-  await start($)
-  await type($, 'add coupons to checkout')
-  await $.turn.start({ text: 'add coupons to checkout', turnId: 't1' })
-  await finish($)
-  await new Promise(resolve => setTimeout(resolve, 1700))
-
-  expect(session.appended().map(row => JSON.stringify(row.message)).join('\n')).not.toContain('ask the person once')
+  expect(JSON.stringify(submitted.map(e => e.context ?? []))).not.toContain('ask the person once')
 })
 
 test('a Haiku call that throws still ends the wait for its score', async ($, on) => {
@@ -219,14 +255,24 @@ test('a message typed over a running turn stays in the task under way', async ($
 })
 
 test('a score asked for before the session started again does not reach the new session', async ($, on) => {
-  engine(on, { haiku: 'clarity=goal hard=no risky=no size=large sure=90', haikuDelayMs: 1500, matt: MATT_SKILLS })
-  const session = mock.session(on)
+  const { submitted } = engine(on, { haiku: 'clarity=goal hard=no risky=no size=large sure=90', haikuDelayMs: 1500, matt: MATT_SKILLS })
   await start($)
-  await type($, 'add coupons to checkout')
+  const typed = type($, 'add coupons to checkout')
+  await new Promise(resolve => setTimeout(resolve, 500))
   await start($)
-  await $.turn.start({ text: 'hello', turnId: 't2' })
-  await new Promise(resolve => setTimeout(resolve, 1700))
+  await typed
 
-  expect(session.appended().map(row => JSON.stringify(row.message)).join('\n')).not.toContain('ask the person once')
+  expect(JSON.stringify(submitted.at(-1)?.context ?? '')).not.toContain('ask the person once')
   expect(await bandText($)).not.toContain('goal known')
+})
+
+test('the mod switched off while a prompt waits brings no question and keeps no score', async ($, on) => {
+  const { submitted } = engine(on, { haiku: 'clarity=goal hard=no risky=no size=large sure=90', haikuDelayMs: 300, matt: MATT_SKILLS })
+  await start($)
+  const typed = type($, 'add coupons to checkout')
+  await new Promise(resolve => setTimeout(resolve, 100))
+  await $.command.run({ command: 'open-effort', args: 'off', origin: { kind: 'composer' }, presentation: PRESENTATION })
+  await typed
+
+  expect(JSON.stringify(submitted.at(-1)?.context ?? '')).not.toContain('ask the person once')
 })
