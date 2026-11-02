@@ -106,7 +106,21 @@ async function paneButton($: Parameters<typeof start>[0]) {
   return /"key":"pane","label":"([^"]*)"/.exec(drawn)?.[1]
 }
 
-test('a newer version shows a card at the top of the pane and a dot on the band’s ≡', async ($, on) => {
+/** The label of the band's coloured button, when it shows one. */
+async function updateButton($: Parameters<typeof start>[0], surface: (typeof SURFACES)[number] = 'desktop') {
+  const ui = await $.ui.mount({ ...BAND, surface })
+  const drawn = JSON.stringify(await ui.drawn())
+  await ui.unmount()
+  return /"key":"update","label":"([^"]*)","variant":"primary"/.exec(drawn)?.[1] ?? /"label":"([^"]*)","variant":"primary"/.exec(drawn)?.[1]
+}
+
+/** The timer that looks for a new version comes round. */
+async function tick(timers: (() => void)[]) {
+  for (const fire of timers.splice(0)) fire()
+  await settle()
+}
+
+test('a newer version shows a card at the top of the pane and a coloured button on the band', async ($, on) => {
   engine(on, { files: INSTALLED, latest: NEWER })
   await start($)
   await settle()
@@ -115,16 +129,18 @@ test('a newer version shows a card at the top of the pane and a dot on the band�
   expect(pane).toContain('0.4.0 is out · you have 0.3.0')
   expect(pane.indexOf('0.4.0 is out · you have 0.3.0')).toBeLessThan(pane.indexOf('Switch'))
   expect(pane).toContain('Releases on GitHub')
-  expect(await paneButton($)).toBe('≡ ●')
+  expect(await updateButton($)).toBe('↑ Update')
+  expect(await paneButton($)).toBe('≡')
 })
 
 for (const [name, latest] of [['the same version', SAME], ['an older version', JSON.stringify({ version: '0.2.0' })]] as const) {
-  test(`${name} shows no card and no dot`, async ($, on) => {
+  test(`${name} shows no card and no button`, async ($, on) => {
     engine(on, { files: INSTALLED, latest })
     await start($)
     await settle()
 
     expect(await paneText($)).not.toContain('is out · you have')
+    expect(await updateButton($)).toBeUndefined()
     expect(await paneButton($)).toBe('≡')
   })
 }
@@ -136,7 +152,7 @@ test('switching the daily check off keeps a newer version already read', async (
   await pressPane($, 'updates-daily-off')
 
   expect(await paneText($)).toContain('0.4.0 is out · you have 0.3.0')
-  expect(await paneButton($)).toBe('≡ ●')
+  expect(await updateButton($)).toBe('↑ Update')
 })
 
 const BIN = '/Applications/Claude.app/Contents/Resources/claude'
@@ -242,7 +258,7 @@ for (const surface of SURFACES) {
 
 for (const surface of SURFACES) {
   for (const columns of [30, 60, 120]) {
-    test(`on ${surface} at ${columns} columns, the band draws with the update dot`, async ($, on) => {
+    test(`on ${surface} at ${columns} columns, the band draws with the update button`, async ($, on) => {
       engine(on, { files: INSTALLED, latest: NEWER })
       await start($)
       await settle()
@@ -250,7 +266,8 @@ for (const surface of SURFACES) {
       const ui = await $.ui.mount({ ...BAND, surface, props: { ...BAND.props, bodyColumns: columns } })
       const drawn = JSON.stringify(await ui.drawn())
       await ui.unmount()
-      expect(drawn).toContain('≡ ●')
+      expect(drawn).toContain('↑ Update')
+      expect(drawn).toContain('≡')
     })
   }
 }
@@ -320,4 +337,100 @@ test('a failing store write during a check does not leave the pane checking', as
   await ui.unmount()
 
   expect(await paneText($)).toContain('Check now')
+})
+
+test('the band’s button opens the pane, and leaves it open when it already shows', async ($, on) => {
+  const { opened } = engine(on, { files: INSTALLED, latest: NEWER })
+  await start($)
+  await settle()
+  for (const times of [1, 2]) {
+    const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+    await ui.press({ key: 'update' })
+    await ui.unmount()
+    expect(opened.filter(id => id === 'open-effort').length).toBe(times)
+  }
+})
+
+test('a failed update still says Update on the band', async ($, on) => {
+  engine(on, { files: INSTALLED, latest: NEWER, processes: [{ exitCode: 1, stderr: 'no' }] })
+  await start($)
+  await settle()
+  await pressPane($, 'update-run')
+
+  expect(await updateButton($)).toBe('↑ Update')
+})
+
+test('once updated, the band’s button says Reload', async ($, on) => {
+  engine(on, { files: INSTALLED, latest: NEWER })
+  await start($)
+  await settle()
+  await pressPane($, 'update-run')
+
+  expect(await updateButton($)).toBe('↻ Reload')
+})
+
+test('the band’s button speaks Thai', async ($, on) => {
+  engine(on, { files: INSTALLED, latest: NEWER, settings: { language: 'thai' } })
+  await start($)
+  await settle()
+
+  expect(await updateButton($)).toBe('↑ อัปเดต')
+  expect(await updateButton($, 'terminal')).toBe('↑ อัปเดต')
+})
+
+test('a version another session read reaches an open session at a tick, with no network read', async ($, on) => {
+  const { fetched, store, timers } = engine(on, { files: INSTALLED, latest: SAME, store: { latestVersion: { at: Date.UTC(2026, 9, 31, 6, 0), version: '0.3.0' } } })
+  await start($)
+  await settle()
+  expect(await updateButton($)).toBeUndefined()
+  store.set('latestVersion', { at: Date.UTC(2026, 9, 31, 6, 30), version: '0.4.0' })
+  await tick(timers)
+
+  expect(await updateButton($)).toBe('↑ Update')
+  expect(fetched).toEqual([])
+})
+
+test('a kept version older than what the session knows does not take its place', async ($, on) => {
+  const { store, timers } = engine(on, { files: INSTALLED, latest: NEWER })
+  await start($)
+  await settle()
+  store.set('latestVersion', { at: Date.UTC(2026, 9, 31, 7, 0), version: '0.3.0' })
+  await tick(timers)
+
+  expect(await updateButton($)).toBe('↑ Update')
+})
+
+test('an open session reads GitHub at a tick once the day is up, and not before', async ($, on) => {
+  const { fetched, clock, timers } = engine(on, { files: INSTALLED, latest: NEWER, store: { latestVersion: { at: Date.UTC(2026, 9, 31, 6, 0), version: '0.3.0' } } })
+  await start($)
+  await settle()
+  await tick(timers)
+  expect(fetched.length).toBe(0)
+  expect(await updateButton($)).toBeUndefined()
+  clock.now += DAY_MS
+  await tick(timers)
+
+  expect(fetched.length).toBe(1)
+  expect(await updateButton($)).toBe('↑ Update')
+})
+
+test('with the daily check switched off in the pane, a tick reads nothing', async ($, on) => {
+  const { fetched, clock, timers } = engine(on, { files: INSTALLED, latest: NEWER, store: { latestVersion: { at: Date.UTC(2026, 9, 31, 6, 0), version: '0.3.0' } } })
+  await start($)
+  await settle()
+  await pressPane($, 'updates-daily-off')
+  clock.now += DAY_MS
+  await tick(timers)
+
+  expect(fetched).toEqual([])
+})
+
+test('a session started again keeps one timer', async ($, on) => {
+  const { timers } = engine(on, { files: INSTALLED, latest: SAME })
+  await start($)
+  await settle()
+  await start($)
+  await settle()
+
+  expect(timers.length).toBe(1)
 })

@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, PromptOrigin, Register, RenderChildren } from 'claude-code'
+import type { EngineInterface, PromptOrigin, Register, RenderChildren, Timer } from 'claude-code'
 
 import type { Declined, Effort, Flow, FlowState, HistoryEntry, Language, LanguageChoice, ModelTier, Project, Stage, SubAgent, Switches, Task, TicketSetting, TurnLog, UpdateState } from '../types'
 import { checkRun, isTestFile } from './checks'
@@ -18,7 +18,7 @@ import {
 import type { FlowModel } from './policy'
 import { SCORE_SYSTEM, SCORE_TIMEOUT_MS, isGoOn, isUnsure, scorePrompt, scoredFrom } from './score'
 import type { Scored } from './score'
-import { CHECK_EVERY_MS, CHECK_TIMEOUT_MS, RELEASES_URL, UPDATE_COMMAND, UPDATE_STEPS, UPDATE_TIMEOUT_MS, UPDATE_URL, newerOf, reasonOf, versionOf } from './update'
+import { CHECK_EVERY_MS, CHECK_TIMEOUT_MS, LOOK_EVERY_MS, RELEASES_URL, UPDATE_COMMAND, UPDATE_STEPS, UPDATE_TIMEOUT_MS, UPDATE_URL, isNewer, newerOf, reasonOf, versionOf } from './update'
 import { clockTime, languageOf, modelName, wordsFor } from './words'
 import type { Why } from './words'
 
@@ -259,8 +259,11 @@ async function checkForUpdate($: EngineInterface, isPressed: boolean): Promise<v
   const now = await $.clock.now()
   const kept = (await $.store.get(STORE_LATEST)) as { at?: unknown; version?: unknown } | undefined
   const keptVersion = typeof kept?.version === 'string' ? kept.version : null
-  if (keptVersion) await update($, updates, u => ({ ...u, latest: u.latest ?? keptVersion }))
-  const isDue = isPressed || ((await read($, updates)).isDaily && !(typeof kept?.at === 'number' && now - kept.at < CHECK_EVERY_MS))
+  // What another session read reaches this one, as long as it is newer than what this one knows.
+  if (keptVersion) await update($, updates, u => (!u.latest || isNewer(keptVersion, u.latest) ? { ...u, latest: keptVersion } : u))
+  // The switch from the store: on a timer this `$` is session.start's, whose atom reads can be stale.
+  const isDaily = (await $.store.get(STORE_CHECK_UPDATES)) !== false
+  const isDue = isPressed || (isDaily && !(typeof kept?.at === 'number' && now - kept.at < CHECK_EVERY_MS))
   if (!isDue) return
   // One read at a time, claimed in the same change that marks it running.
   let isClaimed = false
@@ -576,6 +579,9 @@ async function togglePane($: EngineInterface): Promise<void> {
 // variable, as a hook held on Haiku reads atoms as they stood at its last write, not as a newer prompt left them.
 let scoreGeneration = 0
 
+// The timer that looks for a new version.
+let lookTimer: Timer | undefined
+
 export const register: Register = on => {
   // Once the session has started in its folder: the project, its switches and history, and the language.
   on('session.start', async ($, e, next) => {
@@ -612,6 +618,9 @@ export const register: Register = on => {
       await update($, updates, (u): UpdateState => ({ ...u, isDaily, current, isChecking: false, isUnreached: false, step: 'idle', reason: null }))
       // In the background: a slow network never holds the session.
       void checkForUpdate($, false).catch(() => undefined)
+      // An open session keeps looking; a session started again keeps one timer.
+      lookTimer?.cancel()
+      lookTimer = $.clock.every(LOOK_EVERY_MS, () => void checkForUpdate($, false).catch(() => undefined))
     } catch {
       // No version shown; Check still reads.
     }
@@ -1047,13 +1056,16 @@ export const register: Register = on => {
     // A prompt held on Haiku: the band says so, or the wait would look like a freeze.
     const isReading = await read($, isScoring)
     const line = isReading ? `open-effort · ${words.steps.reading}` : words.band(rung?.effort ?? null, onFable, why, t.stage, flowName)
-    // A newer version of the mod puts a dot on the pane's button: the band itself stays as wide as it was.
-    const hasNewer = newerOf(await read($, updates)) !== null
-    const pane = <Button key="pane" label={hasNewer ? '≡ ●' : '≡'} onPress={() => togglePane($)} />
+    // A newer version of the mod, or one installed and not yet loaded: a button of its own says what to do next.
+    const up = await read($, updates)
+    const nextLabel = up.step === 'updated' ? words.pane.bandReload : newerOf(up) ? words.pane.bandUpdate : null
+    const updateButton = nextLabel ? <Button key="update" label={nextLabel} variant="primary" onPress={() => openPane($)} /> : null
+    const pane = <Button key="pane" label="≡" onPress={() => togglePane($)} />
     if (e.surface === 'terminal' || !('Svg' in table)) {
       return (
-        <Box gap={1}>
+        <Box gap={1} flexWrap="wrap">
           <Text dimColor>{line}</Text>
+          {updateButton}
           {pane}
         </Box>
       )
@@ -1061,9 +1073,8 @@ export const register: Register = on => {
     const { Svg } = table
     const picked = await read($, themeChoice)
     useTheme(picked)
-    // The band's cells are about 8 CSS pixels wide on the desktop; leave room for the pane's button, a dot wider with
-    // a new version.
-    const room = Math.max(96, e.props.bodyColumns * 8 - (hasNewer ? 80 : 64))
+    // The band's cells are about 8 CSS pixels wide on the desktop; leave room for the buttons.
+    const room = Math.max(96, e.props.bodyColumns * 8 - (updateButton ? 176 : 64))
     const source = t.stage ? 'stage' : t.score && t.effort ? 'score' : 'own'
     const reason = t.score ? words.reason({ kind: 'scored', score: t.score }) : words.reason(why)
     // The task's flow, left to right: what Haiku read (or the stage), then the effort in use, which carries the
@@ -1140,7 +1151,10 @@ export const register: Register = on => {
         <Box flexDirection="column">
           <Box justifyContent="space-between" alignItems="center" gap={1}>
             <Svg source={drawn.source} width={drawn.width} height={drawn.height} alt={line} />
-            {pane}
+            <Box gap={1} flexShrink={0}>
+              {updateButton}
+              {pane}
+            </Box>
           </Box>
           {node && <Svg source={node.source} width={node.width} height={node.height} alt={words.steps.agentsAt(atWork.length)} />}
           {node && (
