@@ -48,7 +48,7 @@ const seenLast = atom({ plugin: 'open-effort', key: 'seenLast' } as const, { sco
 const agents = atom({ plugin: 'open-effort', key: 'agents' } as const, {} as Record<string, SubAgent>)
 // Tickets handed to sub-agents not yet started, by the Agent call's tool_use_id: the ticket and its setting.
 const handed = atom({ plugin: 'open-effort', key: 'handed' } as const, {} as Record<string, { ticket: string } & TicketSetting>)
-// Whether a prompt's score is still on its way: its requests go out at the session's own effort meanwhile.
+// Whether a prompt is waiting for its score: the band says so, and a request sent meanwhile goes at the session's own effort.
 const isScoring = atom({ plugin: 'open-effort', key: 'isScoring' } as const, false)
 // The task as it stood when the prompt now being scored was typed: what changed since is kept when the score comes.
 const before = atom({ plugin: 'open-effort', key: 'before' } as const, FRESH_TASK as Task)
@@ -471,6 +471,7 @@ async function loadProject($: EngineInterface): Promise<void> {
  */
 async function applyScore($: EngineInterface, scored: Scored, generation: number): Promise<string[]> {
   if (scoreGeneration !== generation) return []
+  // Written first: a hook held on Haiku reads atoms as they stood at its last write, and the reads below must be current.
   await update($, isScoring, () => false)
   // Switched off while the score was on its way: nothing to apply, nothing to ask.
   if (!(await read($, isOn))) return []

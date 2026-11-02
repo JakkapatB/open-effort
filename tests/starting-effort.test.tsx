@@ -277,6 +277,8 @@ test('the mod switched off while a prompt waits brings no question and keeps no 
 
   expect(submitted.map(e => e.text)).toEqual(['add coupons to checkout'])
   expect(JSON.stringify(submitted.at(-1)?.context ?? '')).not.toContain('ask the person once')
+  await $.command.run({ command: 'open-effort', args: 'on', origin: { kind: 'composer' }, presentation: PRESENTATION })
+  expect(await bandText($)).not.toContain('goal known')
 })
 
 test('while a prompt waits, the band says Haiku is reading, and stops once it has', async ($, on) => {

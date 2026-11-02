@@ -199,7 +199,7 @@ declare module 'claude-code' {
       handed: Record<string, { ticket: string } & TicketSetting>
       /** Whether the surface can put an agent's transcript in view; false once it said it draws no main view. */
       canView: boolean
-      /** Whether a prompt's score is still on its way: its requests go out at the session's own effort meanwhile. */
+      /** Whether a prompt is waiting for its score: the band says so, and a request sent meanwhile goes at the session's own effort. */
       isScoring: boolean
       /** The task as it stood when the prompt being scored was typed. */
       before: Task

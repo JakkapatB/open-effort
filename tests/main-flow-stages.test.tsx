@@ -270,7 +270,33 @@ test('the stage tool says when a task was not sent into the flow', async ($, on)
   await start($)
   await type($, 'add a coupon field')
 
-  expect(JSON.stringify(await stage($, 'implement'))).toContain('not sent into the flow')
+  const said = JSON.stringify(await stage($, 'implement'))
+  expect(said).toContain('not sent into the flow')
+  expect(said).not.toContain('file path in the Agent prompt')
+})
+
+test('the stage tool says when the flow is off, and brings no note', async ($, on) => {
+  engine(on, { haiku: LARGE })
+  await start($)
+  await type($, 'add coupons to checkout')
+
+  const said = JSON.stringify(await stage($, 'tickets'))
+  expect(said).toContain('the flow is off')
+  expect(said).not.toContain('Model:')
+})
+
+test('a ticket stage typed as its command brings its note with the prompt', async ($, on) => {
+  const { submitted } = await flow(on)
+  const session = mock.session(on)
+  await start($)
+  await type($, 'add coupons to checkout')
+  await stage($, 'grill')
+  await $.prompt.submit({ text: '/mattpocock-skills:to-tickets', command: { name: 'mattpocock-skills:to-tickets', args: '' }, wait: false, origin: { kind: 'composer' } })
+  expect(JSON.stringify(submitted.at(-1)?.context)).toContain('Model:')
+  await $.prompt.submit({ text: '/mattpocock-skills:implement', command: { name: 'mattpocock-skills:implement', args: '' }, wait: false, origin: { kind: 'composer' } })
+  expect(JSON.stringify(submitted.at(-1)?.context)).toContain('file path in the Agent prompt')
+
+  expect(session.appended().length).toBe(0)
 })
 
 test('entering the Main Flow moves a Sonnet session’s task to the frontier model', async ($, on) => {

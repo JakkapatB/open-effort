@@ -276,8 +276,8 @@ Test, typecheck, build and lint runs (JavaScript/TypeScript, Python, Go, Rust, N
 |---|---|---|
 | `turn.step` | Sets each model request's effort, and its model when the task moved to another one | The request's `effort` and `model` |
 | `tool.call` on `Agent` | Sets a sub-agent's model and effort by its type, or from a ticket handed to it | The call's `model` and `effort`, only when the call names neither |
-| `prompt.submit` | Reads the project's flow file for each new task; has Haiku read a new request; adds the notes above when there is a question for you | Adds context to the prompt; the prompt's text is never changed |
-| `tool.call` on `Bash` | Counts test, lint, build and typecheck runs as passing or failing checks | Nothing |
+| `prompt.submit` | Reads the project's flow file for each new task; has Haiku read a new request, holding the prompt up to 15 seconds; adds the notes above when there is a question for you or you type a stage's command | Adds context to the prompt; the prompt's text is never changed |
+| `tool.call` on `Bash` | Counts test, lint, build and typecheck runs as passing or failing checks; tells Claude when a stuck task should ask you | Adds context to a failing check's result; the result itself is never changed |
 | `tool.call` on `Read`, `Skill`, `Edit`, `Write` | Notices a stage's skill being used, a ticket being read, a test being written | Nothing |
 | `tool.call` on `mcp__open-effort__stage`, `__model`, `__report` | Answers the mod's own three tools | They are the mod's own tools |
 | `turn.start`, `turn.complete`, `session.start`, `session.end` | Tracks sub-agents at work, the turn's history entry, the project's switches; as a session starts, the daily update check | Nothing |
@@ -292,7 +292,7 @@ Test, typecheck, build and lint runs (JavaScript/TypeScript, Python, Go, Rust, N
 
 - The mod API is new in Claude Code and may change.
 - Switching a task's model starts its prompt cache afresh.
-- A slow Haiku reading arrives during the turn; until it does, requests use the session's own effort, on the task's model.
+- A new request waits up to 15 seconds for Haiku's reading; with none by then, it goes at the session's own effort, on the task's model.
 - A command typed with words after it (`/fix-typo the title`) counts as a new request; a command alone keeps the task.
 - A resumed session starts with no task; the flow comes back when Claude names its stage.
 - `/open-effort flow` hands Claude its prompt a moment after the command, as a turn of its own.
