@@ -1,6 +1,6 @@
 {
   "name": "open-effort",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "private": true,
   "description": "Release tooling for the open-effort Claude Code plugin; the plugin itself has no dependencies.",
   "repository": {
