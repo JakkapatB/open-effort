@@ -1259,12 +1259,12 @@ export const register: Register = on => {
           </Text>
         </Box>
         {newer && up.current && (
-          <Box flexDirection="column" borderStyle="round" borderColor={ACCENT} paddingX={1} marginTop={1}>
+          <Box flexDirection="column" gap={1} borderStyle="round" borderColor={ACCENT} paddingX={1} paddingY={e.surface === 'terminal' ? 0 : 1} marginTop={1}>
             <Text bold color={ACCENT}>
               {words.newVersion(newer, up.current)}
             </Text>
             {up.step === 'updated' ? (
-              <Box flexDirection="column">
+              <Box flexDirection="column" gap={1}>
                 <Text>{words.updated(newer)}</Text>
                 <Box flexWrap="wrap" gap={1}>
                   <Button key="update-reload" label={words.reload} variant="primary" onPress={() => reloadPlugins($)} />
@@ -1285,8 +1285,10 @@ export const register: Register = on => {
                 <Text>{UPDATE_COMMAND}</Text>
               </Box>
             )}
-            <Text dimColor>{words.whatChanged}</Text>
-            {'Link' in table ? <table.Link href={RELEASES_URL} label={words.releases} /> : <Text>{RELEASES_URL}</Text>}
+            <Box flexWrap="wrap" columnGap={1}>
+              <Text dimColor>{words.whatChanged}</Text>
+              {'Link' in table ? <table.Link href={RELEASES_URL} label={words.releases} /> : <Text>{RELEASES_URL}</Text>}
+            </Box>
           </Box>
         )}
         {section(

@@ -502,3 +502,17 @@ test('on the desktop the band’s picture leaves room for the buttons, and its r
   expect(drawn).toContain('"flexWrap":"wrap"')
   expect(drawn).toContain('"flexShrink":0')
 })
+
+for (const [surface, padding] of [['desktop', 1], ['terminal', 0]] as const) {
+  test(`on ${surface} the update card spaces its rows`, async ($, on) => {
+    engine(on, { files: INSTALLED, latest: NEWER })
+    await start($)
+    await settle()
+    const ui = await $.ui.mount({ ...PANE, surface })
+    const drawn = JSON.stringify(await ui.drawn())
+    await ui.unmount()
+
+    expect(drawn).toContain('"gap":1,"borderStyle":"round"')
+    expect(drawn).toContain(`"paddingY":${padding}`)
+  })
+}
