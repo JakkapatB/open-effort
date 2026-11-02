@@ -593,3 +593,16 @@ test('a shell’s answer is the binary Update runs, and a step that fails names 
   expect(ran[0]?.[0]).toBe('/bin/sh')
   expect(ran[1]?.[0]).toBe(found)
 })
+
+test('where the session has /plugin, Update runs it, runs no process, and shows what it said', async ($, on) => {
+  const { ran, commands } = engine(on, { files: INSTALLED, latest: NEWER, skills: [{ name: 'plugin' }] })
+  await start($)
+  await settle()
+  await pressPane($, 'update-run')
+
+  expect(commands).toEqual([
+    { command: 'plugin', args: 'marketplace update open-effort' },
+    { command: 'plugin', args: 'update open-effort@open-effort' },
+  ])
+  expect(ran).toEqual([])
+})

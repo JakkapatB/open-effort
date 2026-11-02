@@ -312,6 +312,16 @@ async function runUpdate($: EngineInterface): Promise<void> {
   if (!isClaimed) return
   let outcome: Pick<UpdateState, 'step' | 'reason' | 'detail'> = { step: 'updated', reason: null, detail: null }
   try {
+    // Claude Code's own /plugin command, where the session has it: nothing to find on the machine.
+    if ((await $.command.list()).some(c => c.name === 'plugin')) {
+      const said: string[] = []
+      for (const step of UPDATE_STEPS) {
+        const { text } = await $.command.run({ command: 'plugin', args: step.slice(1).join(' ') })
+        if (text) said.push(text)
+      }
+      outcome = { step: 'updated', reason: null, detail: said.join('\n').slice(0, 400) || null }
+      return
+    }
     const bin = await claudeBinary($)
     for (const step of UPDATE_STEPS) {
       const res = await $.process.run([bin, ...step], { timeoutMs: UPDATE_TIMEOUT_MS })
@@ -1292,6 +1302,7 @@ export const register: Register = on => {
             {up.step === 'updated' ? (
               <Box flexDirection="column" gap={1}>
                 <Text>{words.updated(newer)}</Text>
+                {up.detail && <Text dimColor>{up.detail}</Text>}
                 <Box flexWrap="wrap" gap={1}>
                   <Button key="update-reload" label={words.reload} variant="primary" onPress={() => reloadPlugins($)} />
                 </Box>
