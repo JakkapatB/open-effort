@@ -108,7 +108,7 @@ async function paneButton($: Parameters<typeof start>[0]) {
   return /"key":"pane","label":"([^"]*)"/.exec(drawn)?.[1]
 }
 
-/** The label of the band's coloured button, when it shows one. */
+/** The label of the band's highlighted button, when it shows one. */
 async function updateButton($: Parameters<typeof start>[0], surface: (typeof SURFACES)[number] = 'desktop') {
   const ui = await $.ui.mount({ ...BAND, surface })
   const drawn = JSON.stringify(await ui.drawn())
@@ -122,7 +122,7 @@ async function tick(timers: (() => void)[]) {
   await settle()
 }
 
-test('a newer version shows a card at the top of the pane and a coloured button on the band', async ($, on) => {
+test('a newer version shows a card at the top of the pane and a highlighted button on the band', async ($, on) => {
   engine(on, { files: INSTALLED, latest: NEWER })
   await start($)
   await settle()
