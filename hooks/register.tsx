@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, PromptOrigin, Register, RenderChildren, Timer } from 'claude-code'
 
-import type { Declined, Effort, Flow, FlowState, HistoryEntry, Language, LanguageChoice, ModelTier, Project, Stage, SubAgent, Switches, Task, TicketSetting, TurnLog, UpdateState } from '../types'
+import type { Declined, Effort, Flow, FlowState, HistoryEntry, Language, LanguageChoice, ModelTier, Project, Stage, SubAgent, Switches, Task, TicketSetting, TurnLog, UpdateState, HeldEffort } from '../types'
 import { checkRun, isTestFile } from './checks'
 import { THEMES, THEME_IDS, agentsSvg, bandKeys, historySvg, isThemeId, stageSvg, stepsSvg, useTheme } from './diagrams'
 import type { Loop, Step, ThemeId } from './diagrams'
@@ -13,8 +13,7 @@ import { IMPLEMENT_NOTE, MODEL_TOOL_SPEC, STAGE_TOOL, STAGE_TOOL_SPEC, askNote, 
 import {
   EFFORTS, FABLE_MODEL, FAILS_TO_STALL, FLOW_MODELS, FRESH_TASK, TIER_MODEL, afterAgentCheck, afterCheck, afterTicketAgentCheck, climbedTo, enteredStage, enteredTicket,
   fitEffort, flowModelFor, isBuiltInAgent, isEffort, isFable, isFlowModel, modelUp, rungOf, startingEffort, subAgentStart, supportedEfforts, taskModel, usedStageSkill,
-  isSizeAtMost, isTierAtMost, largerSize, ticketLinesOf, tierOf,
-} from './policy'
+  isSizeAtMost, isTierAtMost, largerSize, ticketLinesOf, tierOf, keptEffort } from './policy'
 import type { FlowModel } from './policy'
 import { SCORE_SYSTEM, SCORE_TIMEOUT_MS, isGoOn, isUnsure, scorePrompt, scoredFrom } from './score'
 import type { Scored } from './score'
@@ -49,6 +48,8 @@ const agents = atom({ plugin: 'open-effort', key: 'agents' } as const, {} as Rec
 // Tickets handed to sub-agents not yet started, by the Agent call's tool_use_id: the ticket and its setting.
 const handed = atom({ plugin: 'open-effort', key: 'handed' } as const, {} as Record<string, { ticket: string } & TicketSetting>)
 // Whether a prompt is waiting for its score: the band says so, and a request sent meanwhile goes at the session's own effort.
+const heldEffort = atom({ plugin: 'open-effort', key: 'heldEffort' } as const, null as HeldEffort | null)
+const isHoldingEffort = atom({ plugin: 'open-effort', key: 'isHoldingEffort' } as const, true)
 const isScoring = atom({ plugin: 'open-effort', key: 'isScoring' } as const, false)
 // The task as it stood when the prompt now being scored was typed: what changed since is kept when the score comes.
 const before = atom({ plugin: 'open-effort', key: 'before' } as const, FRESH_TASK as Task)
@@ -136,6 +137,7 @@ const STORE_FLOW_MODEL = 'flowModel'
 const STORE_LANGUAGE = 'language'
 const STORE_THEME = 'theme'
 const STORE_CHECK_UPDATES = 'checkUpdates'
+const STORE_HOLD_EFFORT = 'holdEffort'
 // The last read of the newest version: when, and what it found.
 const STORE_LATEST = 'latestVersion'
 
@@ -385,6 +387,7 @@ async function moveToStage($: EngineInterface, stage: Stage, by: StageMover): Pr
   const effort = stageEffort(flow, stage)
   if (!effort) return { outcome: 'off', notes: [] }
   // Entering the flow moves the task to the model picked for it (the frontier model by default), never down.
+  if (t.stage === null) await update($, heldEffort, () => null)
   const moveTo = t.stage === null ? flowModelFor(await read($, flowModel), taskModel(t, await read($, sessionModel))) : null
   await setTask($, (current): Task => ({
     ...enteredStage(current, stage, effort),
@@ -497,6 +500,8 @@ async function applyScore($: EngineInterface, scored: Scored, generation: number
   // Switched off while the score was on its way: nothing to apply, nothing to ask.
   if (!(await read($, isOn))) return []
   const { score, outcome } = scored
+  // A new task may start at another effort; a reply that goes on with the task keeps it.
+  if (!score?.continues) await update($, heldEffort, () => null)
   await update($, seenLast, last => ({ ...last, score: score?.continues ? 'continues' : outcome }))
   // No score: a new task at the session's own effort.
   if (!score) {
@@ -615,7 +620,10 @@ export const register: Register = on => {
     await update($, declined, (): Declined => ({ flow: null, model: null }))
     await update($, turnLog, () => EMPTY_TURN)
     await update($, isRed, () => false)
+    await update($, heldEffort, () => null)
     try {
+      await update($, isHoldingEffort, () => true)
+      if ((await $.store.get(STORE_HOLD_EFFORT)) === false) await update($, isHoldingEffort, () => false)
       await loadProject($)
       // The session's own effort is known from its first request, not from an earlier session's.
       await update($, sessionEffort, () => null)
@@ -843,7 +851,12 @@ export const register: Register = on => {
           const model = rung?.isFable ? (isFable(runsOn) ? runsOn : FABLE_MODEL) : runsOn
           // The rung's effort when the model takes efforts and the request carried one or moves to it; a model that
           // takes none goes without, as it came.
-          const effort = rung && supportedEfforts(model).length > 0 && (carried || model !== e.model) ? rung.effort : null
+          const wanted = rung && supportedEfforts(model).length > 0 && (carried || model !== e.model) ? rung.effort : null
+          const now = await $.clock.now()
+          const kept = (await read($, isHoldingEffort)) ? keptEffort(await read($, heldEffort), wanted ?? carried ?? 'medium', !!t.climbed, model, now, e.messageCount) : null
+          const effort = kept ?? wanted
+          const goesAt = effort ?? carried
+          if (goesAt) await update($, heldEffort, () => ({ effort: goesAt, model, at: now, messageCount: e.messageCount }))
           if (model !== e.model || (effort && effort !== e.effort)) sent = { ...e, ...(effort ? { effort } : {}), ...(model !== e.model ? { model } : {}) }
         }
       } catch {
@@ -1058,13 +1071,18 @@ export const register: Register = on => {
     const flow = await flowOf($)
     const model = taskModel(t, await read($, sessionModel))
     const own = await read($, sessionEffort)
-    const rung = rungOf(t, own, model)
+    const wanted = rungOf(t, own, model)
+    // The effort the next request will keep, on a model where changing it restarts the prompt cache.
+    const kept = wanted && (await read($, isHoldingEffort)) ? keptEffort(await read($, heldEffort), wanted.effort, !!t.climbed, model, await $.clock.now(), Number.MAX_SAFE_INTEGER) : null
+    const isHeld = !!kept && kept !== wanted?.effort
+    const rung = wanted && kept ? { ...wanted, effort: kept } : wanted
     // The flow as the band names it: Matt's as the Main Flow, a project's own by its name.
     const flowName = flow.source === 'matt' ? words.steps.stage : short(flow.name)
     const climbOffer = t.isClimbOffer && t.modelOffer ? t.modelOffer : null
     const why: Why =
       t.isAtLadderEnd ? { kind: 'ladderEnd' }
       : climbOffer ? { kind: 'climbOffer' }
+      : isHeld ? { kind: 'held' }
       : t.climbed ? { kind: 'climbed' }
       : t.stage ? { kind: 'stage' }
       : t.score && t.effort ? { kind: 'scored', score: t.score }
@@ -1216,6 +1234,7 @@ export const register: Register = on => {
     const used = await read($, flowState)
     const up = await read($, updates)
     const newer = newerOf(up)
+    const holding = await read($, isHoldingEffort)
     const command = updateCommand(await $.env.get('CLAUDE_CODE_EXECPATH'))
     // Shown in the card and beside the button in Updates, so a failure is seen where the person pressed.
     const askedRows = (
@@ -1401,6 +1420,11 @@ export const register: Register = on => {
           words.advanced,
           <Text dimColor>{words.defaults}</Text>,
           row('open-effort', toggle('machine-on', 'machine-off', s.machine, value => setSwitches($, x => ({ ...x, machine: value })))),
+          row(words.holdEffort, toggle('hold-effort-on', 'hold-effort-off', holding, async value => {
+            await update($, isHoldingEffort, () => value)
+            await $.store.set(STORE_HOLD_EFFORT, value)
+          })),
+          <Text dimColor>{words.holdEffortNote}</Text>,
           row(words.flow, toggle('flow-machine-on', 'flow-machine-off', s.flowMachine, value => setSwitches($, x => ({ ...x, flowMachine: value })))),
         )}
       </Box>

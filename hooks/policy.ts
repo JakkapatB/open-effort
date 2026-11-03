@@ -1,4 +1,4 @@
-import type { Clarity, Effort, ModelTier, Rung, Score, Size, Stage, SubAgent, Task, TicketSetting } from '../types'
+import type { Clarity, Effort, ModelTier, Rung, Score, Size, Stage, SubAgent, Task, TicketSetting, HeldEffort } from '../types'
 import { MODEL_TIERS as TIERS, isUnsure } from './score'
 
 export const EFFORTS: readonly Effort[] = ['low', 'medium', 'high', 'xhigh', 'max']
@@ -190,6 +190,27 @@ export function rungAbove(rung: Rung, model: string | null = null): Rung | null 
   // On the task's model the ladder goes no higher than xhigh, and only through the efforts that model takes.
   const next = supportedEfforts(model).find(effort => EFFORTS.indexOf(effort) > at && EFFORTS.indexOf(effort) <= EFFORTS.indexOf('xhigh'))
   return next ? { effort: next, isFable: false } : null
+}
+
+/** How long the prompt cache outlives the last request, as measured: past this a change of effort costs nothing. */
+export const CACHE_LIFE_MS = 60 * 60 * 1000
+
+/** Whether changing the effort restarts the prompt cache on `model`: every model that takes effort but those measured to hold it. */
+export function isEffortBound(model: string | null): boolean {
+  const id = (model ?? '').replace(/^.*?(claude-)/, '$1')
+  return supportedEfforts(model).length > 0 && !/^claude-(fable-5-1|(opus|sonnet|haiku)-5-5)/.test(id)
+}
+
+/**
+ * The effort to keep instead of `wanted`, so the prompt cache holds; null when the request is free to take `wanted`:
+ * on a model that holds its cache, after a change of model, with the cache already gone (too long since the last
+ * request, or fewer messages, which is a compaction), or for a climb above the kept effort.
+ */
+export function keptEffort(held: HeldEffort | null, wanted: Effort, isClimb: boolean, model: string | null, now: number, messageCount: number): Effort | null {
+  if (!held || !isEffortBound(model) || held.model !== model) return null
+  if (now - held.at >= CACHE_LIFE_MS || messageCount < held.messageCount) return null
+  if (isClimb && EFFORTS.indexOf(wanted) > EFFORTS.indexOf(held.effort)) return null
+  return held.effort
 }
 
 /** The effort a task starts at on a model a climb moved it to. */

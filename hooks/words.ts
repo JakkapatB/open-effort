@@ -18,6 +18,7 @@ export type Why =
   | { kind: 'climbed' }
   | { kind: 'ladderEnd' }
   | { kind: 'climbOffer' }
+  | { kind: 'held' }
 
 export type Words = {
   commandDescription: string
@@ -88,6 +89,8 @@ export type PaneWords = {
   missing: (skills: readonly string[]) => string
   install: string
   updates: string
+  holdEffort: string
+  holdEffortNote: string
   /** The band's buttons: a new version is out, and one is installed and not yet loaded. */
   bandUpdate: string
   bandReload: string
@@ -144,6 +147,7 @@ type Phrases = {
   climbed: string
   ladderEnd: string
   climbOffer: string
+  held: string
 }
 
 function scoreWords(p: Phrases, score: Score): string {
@@ -203,6 +207,7 @@ const EN_PHRASES: Phrases = {
   climbed: `climbed: ${FAILS_TO_STALL} failing checks in a row`,
   ladderEnd: 'at the top: Claude will ask you',
   climbOffer: 'top effort on this model: Claude asks you about the next model up',
+  held: 'held to keep the prompt cache',
 }
 
 const TH_PHRASES: Phrases = {
@@ -216,6 +221,7 @@ const TH_PHRASES: Phrases = {
   climbed: `ไต่ขึ้น: check ไม่ผ่าน ${FAILS_TO_STALL} ครั้งติด`,
   ladderEnd: 'สุดบันไดแล้ว: Claude จะถามคุณ',
   climbOffer: 'effort สูงสุดของโมเดลนี้แล้ว: Claude จะถามคุณเรื่องโมเดลที่เก่งกว่า',
+  held: 'คงไว้เพื่อรักษา prompt cache',
 }
 
 const EN: Words = {
@@ -263,6 +269,8 @@ const EN: Words = {
     missing: skills => `Missing skills: ${skills.join(', ')}`,
     install: 'Install them from a terminal, then reload plugins:',
     updates: 'Updates',
+    holdEffort: 'Hold the effort to keep the prompt cache',
+    holdEffortNote: 'On models where changing the effort restarts the prompt cache, it changes only for a new task or when work is stuck.',
     bandUpdate: '↑ Update',
     bandReload: '↻ Reload',
     installed: v => `Installed: ${v}`,
@@ -355,6 +363,8 @@ const TH: Words = {
     missing: skills => `ยังไม่มี skill: ${skills.join(', ')}`,
     install: 'ติดตั้งจาก terminal แล้ว reload plugins:',
     updates: 'อัปเดต',
+    holdEffort: 'คง effort ไว้เพื่อรักษา prompt cache',
+    holdEffortNote: 'บนโมเดลที่เปลี่ยน effort แล้ว prompt cache เริ่มใหม่ effort จะเปลี่ยนเฉพาะตอนเริ่มงานใหม่หรือตอนงานติด',
     bandUpdate: '↑ อัปเดต',
     bandReload: '↻ โหลดใหม่',
     installed: v => `ที่ติดตั้งอยู่: ${v}`,

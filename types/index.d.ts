@@ -133,6 +133,9 @@ export type Switches = { machine: boolean; project: boolean | null; flowMachine:
  * Updates of the mod itself: whether it reads the newest version daily, the installed and newest versions, whether a
  * read is running, and the step an update is at. A read and an update run apart, so neither overwrites the other.
  */
+/** The effort the main session's last request went out at, kept on a model where changing it restarts the prompt cache. */
+export type HeldEffort = { effort: Effort; model: string; at: number; messageCount: number }
+
 export type UpdateState = {
   isDaily: boolean
   /** What stopped Claude Code from running, as the error said it. */
@@ -209,6 +212,10 @@ declare module 'claude-code' {
       declined: Declined
       /** How many messages the conversation held when the mod offered a model. */
       offerAt: number
+      /** The last request's effort, while a new task has not freed it. */
+      heldEffort: HeldEffort | null
+      /** Whether to hold the effort on models where changing it restarts the prompt cache. */
+      isHoldingEffort: boolean
       /** Whether the main session wrote a test since its last check. */
       isRed: boolean
       /** Haiku's readings of tickets without Model and Effort lines, by path, with the text read. */

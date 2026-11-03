@@ -256,7 +256,7 @@ A task keeps one model from start to end, to keep the prompt cache. It moves up 
   - The next new task after a task that moved goes back to the session's model. So does the task under way when Haiku cannot read your message, when the Main Flow ends or is switched off, and when the mod is switched off.
   - After you agreed to a stronger model because checks kept failing, the next stage or ticket goes back to the model the flow runs on.
   - A ticket's sub-agent that climbs to the next model starts afresh too, but only its own cache.
-- **Changing the effort, on some models** (see the table below). The effort changes when a new task starts at another level, when a stall climbs, when a passing check brings it back down, and at a new stage or ticket.
+- **Changing the effort, on some models** (see the table below). On those, and on any model not yet measured to hold its cache, the mod now holds the effort: it changes only for a new task, for a first stage, when work is stuck, or when the cache is already gone. A switch in the pane's Advanced section turns this off. The effort changes when a new task starts at another level, when a stall climbs, when a passing check brings it back down, and at a new stage or ticket.
 - **Pressing Reload after an update**, which may.
 
 | Model | Prompt cache when the effort changes |
@@ -266,9 +266,9 @@ A task keeps one model from start to end, to keep the prompt cache. It moves up 
 | Fable 5, Opus 4.5 | Not measured |
 | Sonnet 4.5, Haiku 4.5 | They take no effort, so it never changes |
 
-Measured on Claude Code 2.1.309; other versions may differ. With thinking off, expect the cache to start afresh on any model; this was not measured.
+Measured once per model on Claude Code 2.1.309, with the mod off, and again on Opus 5 and Opus 5.5 with it on; other versions may differ.
 
-The mod's notes to Claude, Haiku's readings, the band and the pane do not touch the cache.
+In one short test on Opus 5.5, the mod's notes did not break the cache.
 
 ### Models and effort
 
