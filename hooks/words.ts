@@ -45,6 +45,8 @@ export type StepWords = {
   read: string
   effort: string
   noScore: string
+  /** Beside an effort held to keep the prompt cache. */
+  held: string
   /** While a prompt waits for Haiku's score. */
   reading: string
   /** The effort's value before the session's own is seen. */
@@ -232,6 +234,7 @@ const EN: Words = {
     read: 'Haiku read it',
     effort: 'Effort',
     noScore: 'no score',
+    held: 'held',
     reading: 'Haiku is reading your request',
     own: 'session',
     stage: 'Main Flow',
@@ -326,6 +329,7 @@ const TH: Words = {
     read: 'Haiku อ่านแล้ว',
     effort: 'Effort',
     noScore: 'ไม่มีคะแนน',
+    held: 'คงไว้',
     reading: 'Haiku กำลังอ่านคำขอของคุณ',
     own: 'session',
     stage: 'Main Flow',

@@ -48,10 +48,10 @@ const agents = atom({ plugin: 'open-effort', key: 'agents' } as const, {} as Rec
 // Tickets handed to sub-agents not yet started, by the Agent call's tool_use_id: the ticket and its setting.
 const handed = atom({ plugin: 'open-effort', key: 'handed' } as const, {} as Record<string, { ticket: string } & TicketSetting>)
 // Whether a prompt is waiting for its score: the band says so, and a request sent meanwhile goes at the session's own effort.
-const heldEffort = atom({ plugin: 'open-effort', key: 'heldEffort' } as const, null as HeldEffort | null)
-const isHoldingEffort = atom({ plugin: 'open-effort', key: 'isHoldingEffort' } as const, true)
 const isScoring = atom({ plugin: 'open-effort', key: 'isScoring' } as const, false)
 // The task as it stood when the prompt now being scored was typed: what changed since is kept when the score comes.
+const heldEffort = atom({ plugin: 'open-effort', key: 'heldEffort' } as const, null as HeldEffort | null)
+const isHoldingEffort = atom({ plugin: 'open-effort', key: 'isHoldingEffort' } as const, true)
 const before = atom({ plugin: 'open-effort', key: 'before' } as const, FRESH_TASK as Task)
 // What the person turned down this session: the largest work they chose to do without the Main Flow, and the most
 // capable model they chose not to move to. Neither is asked about again for work no larger.
@@ -165,6 +165,8 @@ async function setSwitches($: EngineInterface, change: (s: Switches) => Switches
   await $.store.set(STORE_MAIN_FLOW, next.flowMachine)
   const p = await read($, project)
   if (p) await $.store.set(projectKey(p.root), { isOn: next.project, mainFlow: next.flowProject })
+  // Requests went out unseen while it was off, or may yet: what it held no longer says what the cache was written at.
+  await update($, heldEffort, () => null)
   // Off, the mod keeps no task to come back to; with the Main Flow off, a task in it leaves it.
   if (!(next.project ?? next.machine)) await setTask($, () => FRESH_TASK)
   else if (!(next.flowProject ?? next.flowMachine)) await endFlow($)
@@ -690,6 +692,8 @@ export const register: Register = on => {
         sessionModel: await read($, sessionModel),
         last: await read($, seenLast),
         scoring: scoreGeneration,
+        heldEffort: await read($, heldEffort),
+        isHoldingEffort: await read($, isHoldingEffort),
         running: await read($, running),
       },
       null,
@@ -853,10 +857,13 @@ export const register: Register = on => {
           // takes none goes without, as it came.
           const wanted = rung && supportedEfforts(model).length > 0 && (carried || model !== e.model) ? rung.effort : null
           const now = await $.clock.now()
-          const kept = (await read($, isHoldingEffort)) ? keptEffort(await read($, heldEffort), wanted ?? carried ?? 'medium', !!t.climbed, model, now, e.messageCount) : null
-          const effort = kept ?? wanted
+          // The person's own /effort, a request that carries another, frees it too; a request that carries none stays so.
+          const last = await read($, heldEffort)
+          const held = last?.carried === carried ? last : null
+          const kept = (await read($, isHoldingEffort)) && (carried || wanted) ? keptEffort(held, wanted ?? carried ?? 'medium', !!t.climbed, model, now, e.messageCount) : null
+          const effort = kept ? fitEffort(kept, model) : wanted
           const goesAt = effort ?? carried
-          if (goesAt) await update($, heldEffort, () => ({ effort: goesAt, model, at: now, messageCount: e.messageCount }))
+          if (goesAt) await update($, heldEffort, () => ({ effort: fitEffort(goesAt, model), carried, model, at: now, messageCount: e.messageCount }))
           if (model !== e.model || (effort && effort !== e.effort)) sent = { ...e, ...(effort ? { effort } : {}), ...(model !== e.model ? { model } : {}) }
         }
       } catch {
@@ -977,7 +984,10 @@ export const register: Register = on => {
     const model = taskModel(await read($, task), (await read($, sessionModel)) ?? (await sessionModelNow($)))
     // A model that takes no effort has no ladder to climb: its checks change nothing.
     if (supportedEfforts(model).length === 0) return ran
-    const out = afterCheck(await read($, task), ran.isError !== true, own, model)
+    const standing = await read($, task)
+    const rung = rungOf(standing, own ?? 'medium', model)
+    const inForce = rung && (await read($, isHoldingEffort)) ? keptEffort(await read($, heldEffort), rung.effort, false, model, await $.clock.now(), Number.MAX_SAFE_INTEGER) : null
+    const out = afterCheck(standing, ran.isError !== true, own, model, inForce)
     await setTask($, () => out.task)
     if (out.hasClimbed) await update($, turnLog, (log): TurnLog => ({ ...log, climbs: log.climbs + 1 }))
     const notes = out.hasReachedLadderEnd ? [LADDER_END_NOTE] : []
@@ -1142,7 +1152,7 @@ export const register: Register = on => {
         title: `${words.steps.effort} · ${effortModel}`,
         ...(t.climbed && t.effort ? { aside: words.steps.from(t.effort) } : {}),
         // What goes out: the effort fitted to the model, as the band's line says.
-        value: rung?.effort ?? words.steps.own,
+        value: rung ? `${rung.effort}${isHeld ? ` · ${words.steps.held}` : ''}` : words.steps.own,
         state: t.isAtLadderEnd ? 'done' : loop?.tone === 'alert' ? 'alert' : onFable ? 'violet' : rung ? 'active' : 'idle',
         meter,
         rank: 3,

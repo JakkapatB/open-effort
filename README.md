@@ -223,7 +223,7 @@ A general-purpose sub-agent's effort follows the stage it runs in: the code-revi
 | `xhigh` | Unusually hard work; the review stage; the highest a sub-agent climbs to (one working a ticket then moves a model up, as far as Opus 5.5) |
 | `max` | On Fable 5.1, after `high` and `xhigh` there still fail; for a sub-agent on a model with no `xhigh` (Opus or Sonnet 4.6), in its place; or when you set your session to `max` yourself. The mod never picks it at the start |
 
-Three failing checks in a row raise the effort one level; a passing check brings it back to where the task started. A ticket's `Effort:` overrides the stage's effort for that ticket.
+Three failing checks in a row raise the effort one level; a passing check brings it back to where the task started. A ticket's `Effort:` overrides the stage's effort for that ticket. On models where changing the effort restarts the prompt cache, the effort is held instead: see [What starts the prompt cache afresh](#what-starts-the-prompt-cache-afresh).
 
 ## The pane
 
@@ -256,7 +256,7 @@ A task keeps one model from start to end, to keep the prompt cache. It moves up 
   - The next new task after a task that moved goes back to the session's model. So does the task under way when Haiku cannot read your message, when the Main Flow ends or is switched off, and when the mod is switched off.
   - After you agreed to a stronger model because checks kept failing, the next stage or ticket goes back to the model the flow runs on.
   - A ticket's sub-agent that climbs to the next model starts afresh too, but only its own cache.
-- **Changing the effort, on some models** (see the table below). On those, and on any model not yet measured to hold its cache, the mod now holds the effort: it changes only for a new task, for a first stage, when work is stuck, or when the cache is already gone. A switch in the pane's Advanced section turns this off. The effort changes when a new task starts at another level, when a stall climbs, when a passing check brings it back down, and at a new stage or ticket.
+- **Changing the effort, on some models** (see the table below). On those, and on any model not yet measured to hold its cache, the mod now holds the effort: it changes only for a new task, for a first stage, when work is stuck, or when the cache is already gone. A switch in the pane's Advanced section turns this off. On the models that hold it, a passing check, a later stage and a ticket leave it where it is.
 - **Pressing Reload after an update**, which may.
 
 | Model | Prompt cache when the effort changes |

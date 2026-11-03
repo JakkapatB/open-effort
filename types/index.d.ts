@@ -129,13 +129,13 @@ export type LanguageChoice = 'auto' | Language
  */
 export type Switches = { machine: boolean; project: boolean | null; flowMachine: boolean; flowProject: boolean | null }
 
+/** The effort the main session's last request went out at, kept on a model where changing it restarts the prompt cache. */
+export type HeldEffort = { effort: Effort; carried: Effort | null; model: string; at: number; messageCount: number }
+
 /**
  * Updates of the mod itself: whether it reads the newest version daily, the installed and newest versions, whether a
  * read is running, and the step an update is at. A read and an update run apart, so neither overwrites the other.
  */
-/** The effort the main session's last request went out at, kept on a model where changing it restarts the prompt cache. */
-export type HeldEffort = { effort: Effort; model: string; at: number; messageCount: number }
-
 export type UpdateState = {
   isDaily: boolean
   /** What stopped Claude Code from running, as the error said it. */

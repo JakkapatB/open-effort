@@ -198,7 +198,7 @@ export const CACHE_LIFE_MS = 60 * 60 * 1000
 /** Whether changing the effort restarts the prompt cache on `model`: every model that takes effort but those measured to hold it. */
 export function isEffortBound(model: string | null): boolean {
   const id = (model ?? '').replace(/^.*?(claude-)/, '$1')
-  return supportedEfforts(model).length > 0 && !/^claude-(fable-5-1|(opus|sonnet|haiku)-5-5)/.test(id)
+  return supportedEfforts(model).length > 0 && !/^claude-(fable-5-1|(opus|sonnet|haiku)-5-5)(?!\d|-\d{1,7}\b)/.test(id)
 }
 
 /**
@@ -241,19 +241,22 @@ export function climbedTo(task: Task, tier: ModelTier, from: Effort | null = nul
  * model it climbed to, if any); the third failure in a row climbs a rung. At the top effort of its model, the task
  * offers the person the model one family up (`offer`, the one time it is offered), unless they kept the model once
  * already or there is none above: then it reaches the ladder's end. `hasReachedLadderEnd` is true the one time the task
- * reaches the ladder's end.
+ * reaches the ladder's end. `inForce` is the effort being held in place of the task's rung, when one is.
  */
 export function afterCheck(
   task: Task,
   passed: boolean,
   own: Effort | null,
   model: string | null,
+  inForce: Effort | null = null,
 ): { task: Task; hasClimbed: boolean; hasReachedLadderEnd: boolean; offer: ModelTier | null } {
   const unmoved = { hasClimbed: false, hasReachedLadderEnd: false, offer: null }
   if (passed) return { task: { ...task, climbed: null, fails: 0, isAtLadderEnd: false }, ...unmoved }
   const fails = task.fails + 1
   if (fails < FAILS_TO_STALL) return { task: { ...task, fails }, ...unmoved }
-  const here = rungOf(task, own ?? 'medium', model) ?? { effort: 'medium', isFable: false }
+  const rung = rungOf(task, own ?? 'medium', model) ?? { effort: 'medium', isFable: false }
+  // The ladder climbs from the effort requests really go out at, which a held effort may set.
+  const here = inForce ? { ...rung, effort: inForce } : rung
   const above = rungAbove(here, model)
   // An unscored task keeps the effort it climbed from as its starting point, so it can settle back to it.
   const effort = task.effort ?? (task.climbed ? null : here.effort)
