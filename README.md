@@ -248,7 +248,27 @@ Open it with `/open-effort` or the band's **≡**.
 
 ### One model per task
 
-A task keeps one model from start to end, so the prompt cache holds. It changes only when you agree to a stronger model at the start, when it enters the Main Flow, when Claude uses one of the flow's skills on work you do directly, or when its checks keep failing at the top effort and you agree to move it up one model. It never switches to a weaker model by itself, and moves to a stronger one you were offered only after Claude asked you.
+A task keeps one model from start to end, to keep the prompt cache. It moves up only when you agree to a stronger model at the start, when it enters the Main Flow, when Claude uses one of the flow's skills on work you do directly, or when its checks keep failing at the top effort and you agree to move it up one model. It never moves below the model it started on, and moves to a stronger one you were offered only after Claude asked you.
+
+### What starts the prompt cache afresh
+
+- **Moving to another model, on any model.** That is each move up above, and each move back:
+  - The next new task after a task that moved goes back to the session's model. So does the task under way when Haiku cannot read your message, when the Main Flow ends or is switched off, and when the mod is switched off.
+  - After you agreed to a stronger model because checks kept failing, the next stage or ticket goes back to the model the flow runs on.
+  - A ticket's sub-agent that climbs to the next model starts afresh too, but only its own cache.
+- **Changing the effort, on some models** (see the table below). The effort changes when a new task starts at another level, when a stall climbs, when a passing check brings it back down, and at a new stage or ticket.
+- **Pressing Reload after an update**, which may.
+
+| Model | Prompt cache when the effort changes |
+|---|---|
+| Fable 5.1, Opus 5.5, Sonnet 5.5, Haiku 5.5 | ✅ Holds |
+| Opus 5, Opus 4.8, Opus 4.7, Opus 4.6, Sonnet 5, Sonnet 4.6 | ❌ Starts afresh |
+| Fable 5, Opus 4.5 | Not measured |
+| Sonnet 4.5, Haiku 4.5 | They take no effort, so it never changes |
+
+Measured on Claude Code 2.1.309; other versions may differ. With thinking off, expect the cache to start afresh on any model; this was not measured.
+
+The mod's notes to Claude, Haiku's readings, the band and the pane do not touch the cache.
 
 ### Models and effort
 
@@ -291,7 +311,7 @@ Test, typecheck, build and lint runs (JavaScript/TypeScript, Python, Go, Rust, N
 ### Limits
 
 - The mod API is new in Claude Code and may change.
-- Switching a task's model starts its prompt cache afresh.
+- Switching a task's model starts its prompt cache afresh, and on some models so does changing its effort: see [What starts the prompt cache afresh](#what-starts-the-prompt-cache-afresh).
 - A new request waits up to 15 seconds for Haiku's reading; with none by then, it goes at the session's own effort, on the task's model.
 - Pressing Esc or Stop during that wait cancels the request and keeps the task under way, but the desktop app may show "Claude couldn't process that message". Nothing broke: send the message again when you want it.
 - A command typed with words after it (`/fix-typo the title`) counts as a new request; a command alone keeps the task.
