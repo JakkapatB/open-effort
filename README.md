@@ -22,7 +22,7 @@
 - 🎯 **Fits the effort.** Haiku reads each new request: a clear plan starts at `low`, a hard one at `xhigh`.
 - 📈 **Raises the effort when stuck.** Three failing checks in a row raise the effort one level. Past the highest level, Claude asks whether to move up one model (Sonnet → Opus → Fable 5.1), and only with your yes does it move. If checks still fail at the top, Claude stops and asks you what to do.
 - 🧠 **Asks before switching models.** If the work needs a stronger model than the session's, Claude asks you first.
-- 🗺️ **Runs Matt Pocock's Main Flow.** Grill to retro, every stage and every ticket at its own effort.
+- 🗺️ **Runs Matt Pocock's Main Flow, when you switch it on.** Grill to retro, every stage and every ticket at its own effort. Off by default, so projects that do not use it stay in normal mode.
 - 👀 **Shows what it uses, and why.** A band above the prompt shows the effort and model in use; a pane holds the switches, themes and history.
 
 ## What it changes, measured
@@ -113,7 +113,7 @@ Type these in a project of your own, and watch the band above the prompt. Haiku 
 | `Rename getUser to fetchUser everywhere` | **Haiku read it · clear plan** → **Effort `low`** |
 | `Add a discount code field to checkout and check it on the server` | **goal known** → **Effort `medium`** |
 | `Two orders can both take the last item in stock. Find the race and fix it` | **unusually hard** → **Effort `xhigh`** |
-| `Add gift cards: a balance, an expiry date, paying part of an order, with tests` | Claude first asks whether to take it through the Main Flow (with Matt Pocock's skills installed). If you say yes, the band shows the stage track: **grill → spec → tickets → implement → review → retro**, each at its own effort |
+| `Add gift cards: a balance, an expiry date, paying part of an order, with tests` | Once you switch the flow on, Claude first asks whether to take it through the Main Flow (with Matt Pocock's skills installed). If you say yes, the band shows the stage track: **grill → spec → tickets → implement → review → retro**, each at its own effort |
 
 When a test run fails, the effort card shows **Check failed 1/3**, then **2/3**. On the third failure in a row the effort goes up one level, and the card says where it came from (**↑ from low**). The next passing run brings it back.
 
@@ -161,7 +161,7 @@ The mod never picks `max` by itself.
 |---|---|---|---|---|---|---|
 | Effort | `high` | `high` | `medium` | `high` | `xhigh` | `medium` |
 
-- The flow starts only when you choose it, when Claude asks, or when you type a stage's command. It ends when Claude says it is done, when you switch the Main Flow off, or with the first new work after retro.
+- The flow is off by default. Switch it on in the pane, then it starts only when you choose it, when Claude asks, or when you type a stage's command. It ends when Claude says it is done, when you switch the Main Flow off, or with the first new work after retro.
 - Claude moves the flow from stage to stage with the `stage` tool. A stage's skill Claude uses on its own (a review of its own work during implement) only raises the effort: it does not move the flow.
 - Work you choose to do directly keeps the same care: when Claude uses one of the flow's skills on it (code-review, tdd), the task keeps at least that stage's effort and, while the Main Flow is on, moves to the flow's model, for the rest of the task. The band shows it as "Matt's skill · direct".
 - If you turn the flow or a stronger model down, you are not asked again this session for work no larger, or for a model no more capable.
@@ -187,7 +187,7 @@ A project can use its own flow instead of Matt's. Put it in `.claude/open-effort
 }
 ```
 
-- **One flow per project.** With no file, the project uses Matt Pocock's Main Flow. With one, its flow replaces Matt's. Commit the file and your team shares the flow.
+- **One flow per project.** With no file, the project uses Matt Pocock's Main Flow once switched on. With one, its flow replaces Matt's. Commit the file and your team shares the flow.
 - **Stages.** 2 to 10, in order. A name is up to 16 lower-case letters, digits or dashes. Each stage lists the skills that run it, as Claude Code's skill list names them (`my-skill`, or `plugin:my-skill` for that plugin's alone), and the effort it starts at: `low`, `medium`, `high` or `xhigh`. A skill belongs to one stage only.
 - **Tickets** are optional: the stage that writes them, a later stage that works them, and a glob for their files, whose names start with their number (`01-login.md`). They then work as in the Main Flow: `Model:` and `Effort:` at the top of each.
 - **It runs as the Main Flow does.** Large work has Claude ask you first, or you type a stage's command. Claude goes through the stages in order, using each stage's skills. The flow's model is still picked in the pane, and its switch is the same.
@@ -234,7 +234,7 @@ Open it with `/open-effort` or the band's **≡**.
 </p>
 
 - **On or off** for this project (`/open-effort on|off` does the same).
-- **Flow**: which flow the project uses (Matt's Main Flow or its own file), on or off, and its model.
+- **Flow**: which flow the project uses (Matt's Main Flow or its own file), off by default, on or off, and its model.
 - **Language:** auto, ไทย or English.
 - **Theme:** Claude, Lime, Ocean or Rose.
 - **History:** the last 500 turns of this project.

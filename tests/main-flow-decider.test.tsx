@@ -12,8 +12,8 @@ function notes(submitted: { context?: readonly string[] }[]): string {
   return (submitted[submitted.length - 1]?.context ?? []).join('\n')
 }
 
-test('large implementation work asks the person once whether to take it through the Main Flow', async ($, on) => {
-  const { submitted } = engine(on, { haiku: LARGE, matt: MATT_SKILLS })
+test('large implementation work asks the person once whether to take it through the Main Flow, once switched on', async ($, on) => {
+  const { submitted } = engine(on, { haiku: LARGE, matt: MATT_SKILLS, store: { mainFlow: true } })
   await start($)
   await type($, 'add coupons to checkout, with rules, admin screens and tests')
 
@@ -23,8 +23,8 @@ test('large implementation work asks the person once whether to take it through 
   expect(note).toContain('SKILL.md')
 })
 
-test('borderline work has Claude ask the person once, with a recommendation', async ($, on) => {
-  const { submitted } = engine(on, { haiku: BORDERLINE, matt: MATT_SKILLS })
+test('borderline work has Claude ask the person once, with a recommendation, once switched on', async ($, on) => {
+  const { submitted } = engine(on, { haiku: BORDERLINE, matt: MATT_SKILLS, store: { mainFlow: true } })
   await start($)
   await type($, 'add a coupon field and validate it on the server')
 
@@ -35,7 +35,7 @@ test('borderline work has Claude ask the person once, with a recommendation', as
 
 for (const [name, reply] of [['small work', SMALL], ['work that changes no code', NONE]] as const) {
   test(`${name} stays in normal mode`, async ($, on) => {
-    const { submitted } = engine(on, { haiku: reply, matt: MATT_SKILLS })
+    const { submitted } = engine(on, { haiku: reply, matt: MATT_SKILLS, store: { mainFlow: true } })
     await start($)
     await type($, 'some request')
 
@@ -43,8 +43,8 @@ for (const [name, reply] of [['small work', SMALL], ['work that changes no code'
   })
 }
 
-test('without Matt Pocock’s skills, large work stays in normal mode', async ($, on) => {
-  const { submitted } = engine(on, { haiku: LARGE })
+test('without Matt Pocock’s skills, large work stays in normal mode, even switched on', async ($, on) => {
+  const { submitted } = engine(on, { haiku: LARGE, store: { mainFlow: true } })
   await start($)
   await type($, 'add coupons to checkout')
 
@@ -52,7 +52,7 @@ test('without Matt Pocock’s skills, large work stays in normal mode', async ($
 })
 
 test('Claude Code’s own code-review is not taken for Matt Pocock’s', async ($, on) => {
-  const { submitted } = engine(on, { haiku: LARGE, matt: MATT_SKILLS.filter(s => s !== 'code-review') })
+  const { submitted } = engine(on, { haiku: LARGE, matt: MATT_SKILLS.filter(s => s !== 'code-review'), store: { mainFlow: true } })
   await start($)
   await type($, 'add coupons to checkout')
 
@@ -76,8 +76,25 @@ test('the pane lists nothing missing once the skills are installed', async ($, o
   expect(await paneText($)).not.toContain('claude plugin install')
 })
 
-test('the Main Flow switched off for this machine keeps large work in normal mode', async ($, on) => {
+test('the Main Flow stays off by default: large work stays in normal mode until switched on', async ($, on) => {
   const { submitted } = engine(on, { haiku: LARGE, matt: MATT_SKILLS })
+  await start($)
+  await type($, 'add coupons to checkout')
+
+  expect(notes(submitted)).not.toContain('Main Flow')
+})
+
+test('switching the Main Flow on for this machine asks large work about the Main Flow', async ($, on) => {
+  const { submitted } = engine(on, { haiku: LARGE, matt: MATT_SKILLS })
+  await start($)
+  await pressPane($, 'flow-machine-on')
+  await type($, 'add coupons to checkout')
+
+  expect(notes(submitted)).toContain('Main Flow')
+})
+
+test('the Main Flow switched off for this machine keeps large work in normal mode', async ($, on) => {
+  const { submitted } = engine(on, { haiku: LARGE, matt: MATT_SKILLS, store: { mainFlow: true } })
   await start($)
   await pressPane($, 'flow-machine-off')
   await type($, 'add coupons to checkout')
@@ -86,7 +103,7 @@ test('the Main Flow switched off for this machine keeps large work in normal mod
 })
 
 test('a project’s Main Flow switch wins over the machine’s, and is kept', async ($, on) => {
-  const { submitted } = engine(on, { haiku: LARGE, matt: MATT_SKILLS })
+  const { submitted } = engine(on, { haiku: LARGE, matt: MATT_SKILLS, store: { mainFlow: true } })
   await start($)
   await pressPane($, 'flow-machine-off')
   await pressPane($, 'flow-project-on')
@@ -99,13 +116,17 @@ test('a project’s Main Flow switch wins over the machine’s, and is kept', as
 test('the Main Flow switch and the mod switch are kept apart', async ($, on) => {
   engine(on, { matt: MATT_SKILLS })
   await start($)
+  await pressPane($, 'flow-project-on')
+
+  expect(await bandText($)).toBeDefined()
+
   await pressPane($, 'flow-project-off')
 
   expect(await bandText($)).toBeDefined()
 })
 
 test('while the mod is off, nothing enters the Main Flow', async ($, on) => {
-  const { submitted } = engine(on, { haiku: LARGE, matt: MATT_SKILLS, store: { isOn: false } })
+  const { submitted } = engine(on, { haiku: LARGE, matt: MATT_SKILLS, store: { isOn: false, mainFlow: true } })
   await start($)
   await type($, 'add coupons to checkout')
 

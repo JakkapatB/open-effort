@@ -12,7 +12,7 @@ async function stage($: Engine, name: string) {
   return $.tool.call({ tool: 'mcp__open-effort__stage', stage: name } as never)
 }
 
-const FLOW = { haiku: LARGE, matt: MATT_SKILLS, model: OPUS_5, store: { flowModel: 'session' } }
+const FLOW = { haiku: LARGE, matt: MATT_SKILLS, model: OPUS_5, store: { flowModel: 'session', mainFlow: true } }
 
 test('a flow’s first stage sets the effort, later stages keep it, and a new task frees it', async ($, on) => {
   const { sent } = engine(on, { ...FLOW, haiku: [LARGE, CLEAR] })

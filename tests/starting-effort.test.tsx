@@ -159,7 +159,7 @@ test('the prompt waits for a slow score, so its first request goes out at the sc
 })
 
 test('a slow score sends its question for Claude with the prompt, and appends no row', async ($, on) => {
-  const { submitted } = engine(on, { haiku: 'clarity=goal hard=no risky=no size=large sure=90', haikuDelayMs: 1500, matt: MATT_SKILLS })
+  const { submitted } = engine(on, { haiku: 'clarity=goal hard=no risky=no size=large sure=90', haikuDelayMs: 1500, matt: MATT_SKILLS, store: { mainFlow: true } })
   const session = mock.session(on)
   await start($)
   await type($, 'add coupons to checkout')
@@ -217,7 +217,7 @@ test('a prompt replaced by a newer one while it waits brings no question', async
 })
 
 test('a Haiku call that throws still ends the wait for its score', async ($, on) => {
-  const { sent } = engine(on, { haiku: 'throw', matt: MATT_SKILLS })
+  const { sent } = engine(on, { haiku: 'throw', matt: MATT_SKILLS, store: { mainFlow: true } })
   await start($)
   await type($, 'rename a variable')
   await $.prompt.submit({ text: '/mattpocock-skills:to-spec', command: { name: 'mattpocock-skills:to-spec', args: '' }, wait: false, origin: { kind: 'composer' } })
@@ -256,7 +256,7 @@ test('a message typed over a running turn stays in the task under way', async ($
 })
 
 test('a score asked for before the session started again does not reach the new session', async ($, on) => {
-  const { submitted } = engine(on, { haiku: 'clarity=goal hard=no risky=no size=large sure=90', haikuDelayMs: 1500, matt: MATT_SKILLS })
+  const { submitted } = engine(on, { haiku: 'clarity=goal hard=no risky=no size=large sure=90', haikuDelayMs: 1500, matt: MATT_SKILLS, store: { mainFlow: true } })
   await start($)
   const typed = type($, 'add coupons to checkout')
   await new Promise(resolve => setTimeout(resolve, 500))
@@ -293,7 +293,7 @@ test('while a prompt waits, the band says Haiku is reading, and stops once it ha
 })
 
 test('a note on a prompt keeps the context another plugin put there', async ($, on) => {
-  const { submitted } = engine(on, { haiku: 'clarity=goal hard=no risky=no size=large sure=90', matt: MATT_SKILLS })
+  const { submitted } = engine(on, { haiku: 'clarity=goal hard=no risky=no size=large sure=90', matt: MATT_SKILLS, store: { mainFlow: true } })
   await start($)
   await $.prompt.submit({ text: 'add coupons to checkout', context: ['from another plugin'], wait: false, origin: { kind: 'composer' } })
 

@@ -24,7 +24,8 @@ import type { Why } from './words'
 const isOn = atom({ plugin: 'open-effort', key: 'isOn' } as const, true)
 const switches = atom(
   { plugin: 'open-effort', key: 'switches' } as const,
-  { machine: true, project: null, flowMachine: true, flowProject: null } as Switches,
+  // The flow stays off until the person switches it on: not everyone uses Matt's Main Flow.
+  { machine: true, project: null, flowMachine: false, flowProject: null } as Switches,
 )
 const missing = atom({ plugin: 'open-effort', key: 'missing' } as const, [] as string[])
 // The flow the project uses: its own file's, or Matt Pocock's Main Flow; read again with each new task.
@@ -477,7 +478,8 @@ async function loadProject($: EngineInterface): Promise<void> {
   const root = await $.session.root()
   await update($, project, () => projectOf(root))
   const machine = (await $.store.get(STORE_IS_ON)) !== false
-  const flowMachine = (await $.store.get(STORE_MAIN_FLOW)) !== false
+  // Off by default: an explicit true switches the flow on. Older installs without the key stay off too.
+  const flowMachine = (await $.store.get(STORE_MAIN_FLOW)) === true
   const saved = (await $.store.get(projectKey(root))) as { isOn?: unknown; mainFlow?: unknown } | undefined
   await update($, switches, (): Switches => ({
     machine,

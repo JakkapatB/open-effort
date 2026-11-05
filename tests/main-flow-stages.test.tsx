@@ -20,7 +20,8 @@ async function stage($: Engine, name: string) {
 }
 
 async function flow(on: Parameters<typeof engine>[0], options: Parameters<typeof engine>[1] = {}) {
-  return engine(on, { haiku: LARGE, matt: MATT_SKILLS, ...options })
+  const { store, ...rest } = options
+  return engine(on, { haiku: LARGE, matt: MATT_SKILLS, store: { mainFlow: true, ...store }, ...rest })
 }
 
 /** The effort of a main-session request sent now. */

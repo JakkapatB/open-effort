@@ -29,9 +29,10 @@ async function stage($: Engine, name: string) {
   return $.tool.call({ tool: 'mcp__open-effort__stage', stage: name } as never)
 }
 
-/** A session in a project with the team's flow file, its skills installed. */
+/** A session in a project with the team's flow file, its skills installed. The flow is switched on. */
 function teamEngine(on: Parameters<typeof engine>[0], options: Parameters<typeof engine>[1] = {}) {
-  return engine(on, { haiku: LARGE, skills: TEAM_SKILLS, files: { [FILE]: JSON.stringify(TEAM), ...TASKS }, ...options })
+  const { store, files, ...rest } = options
+  return engine(on, { haiku: LARGE, skills: TEAM_SKILLS, files: { [FILE]: JSON.stringify(TEAM), ...TASKS, ...files }, store: { mainFlow: true, ...store }, ...rest })
 }
 
 /** The effort of a main-session request sent now. */
@@ -165,7 +166,7 @@ test('a stage of a project’s flow needs one of its skills installed, not all',
 
 test('new work typed in the last stage reads the flow file again before asking about the flow', async ($, on) => {
   const files: Record<string, string> = { [FILE]: JSON.stringify(TEAM) }
-  const { submitted } = engine(on, { haiku: LARGE, skills: TEAM_SKILLS, files })
+  const { submitted } = engine(on, { haiku: LARGE, skills: TEAM_SKILLS, files, store: { mainFlow: true } })
   await start($)
   await type($, 'add a login page with tests')
   await stage($, 'check')
@@ -175,8 +176,8 @@ test('new work typed in the last stage reads the flow file again before asking a
   expect(notes(submitted)).toContain('"Renamed flow"')
 })
 
-test('a project without a flow file uses Matt Pocock’s Main Flow, as before', async ($, on) => {
-  const { submitted } = engine(on, { haiku: LARGE, matt: MATT_SKILLS })
+test('a project without a flow file uses Matt Pocock’s Main Flow once switched on', async ($, on) => {
+  const { submitted } = engine(on, { haiku: LARGE, matt: MATT_SKILLS, store: { mainFlow: true } })
   await start($)
   await type($, 'add coupons to checkout')
 
@@ -184,9 +185,18 @@ test('a project without a flow file uses Matt Pocock’s Main Flow, as before', 
   expect(await paneText($)).toContain("Matt Pocock's Main Flow · built in")
 })
 
+test('a project without a flow file stays in normal mode by default, even with Matt Pocock’s skills', async ($, on) => {
+  const { submitted } = engine(on, { haiku: LARGE, matt: MATT_SKILLS })
+  await start($)
+  await type($, 'add coupons to checkout')
+
+  expect(notes(submitted)).not.toContain('grill-with-docs')
+  expect(notes(submitted)).not.toContain('Main Flow')
+})
+
 test('an edited flow file counts from the next new task, not in a flow under way', async ($, on) => {
   const files: Record<string, string> = { [FILE]: JSON.stringify(TEAM) }
-  const { sent } = engine(on, { haiku: LARGE, skills: TEAM_SKILLS, files })
+  const { sent } = engine(on, { haiku: LARGE, skills: TEAM_SKILLS, files, store: { mainFlow: true } })
   await start($)
   await type($, 'add a login page with tests')
   await stage($, 'plan')

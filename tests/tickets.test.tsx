@@ -35,7 +35,7 @@ async function agentStep($: Engine, agentId: string, model: string, effort: NonN
 }
 
 test('the tickets stage asks Claude to name each ticket’s model and effort', async ($, on) => {
-  engine(on, { haiku: LARGE, matt: MATT_SKILLS })
+  engine(on, { haiku: LARGE, matt: MATT_SKILLS, store: { mainFlow: true } })
   const session = mock.session(on)
   await start($)
   await type($, 'add coupons to checkout')
@@ -47,7 +47,7 @@ test('the tickets stage asks Claude to name each ticket’s model and effort', a
 })
 
 test('the implement stage tells Claude to read a ticket and to name it when handing it on', async ($, on) => {
-  engine(on, { haiku: LARGE, matt: MATT_SKILLS })
+  engine(on, { haiku: LARGE, matt: MATT_SKILLS, store: { mainFlow: true } })
   const session = mock.session(on)
   const said = JSON.stringify(await implementing($))
 
@@ -56,7 +56,7 @@ test('the implement stage tells Claude to read a ticket and to name it when hand
 })
 
 test('Claude working a ticket itself takes its effort and keeps the task’s model', async ($, on) => {
-  const { sent } = engine(on, { haiku: LARGE, matt: MATT_SKILLS, files: FILES })
+  const { sent } = engine(on, { haiku: LARGE, matt: MATT_SKILLS, files: FILES, store: { mainFlow: true } })
   await implementing($)
   await $.tool.call({ tool: 'Read', file_path: T4 } as never)
   await request($, 'high', 1)
@@ -65,7 +65,7 @@ test('Claude working a ticket itself takes its effort and keeps the task’s mod
 })
 
 test('a ticket with no Model or Effort line is read by Haiku', async ($, on) => {
-  const { sent, asked } = engine(on, { haiku: [LARGE, 'clarity=clear hard=no risky=no size=small model=sonnet sure=90'], matt: MATT_SKILLS, files: FILES })
+  const { sent, asked } = engine(on, { haiku: [LARGE, 'clarity=clear hard=no risky=no size=small model=sonnet sure=90'], matt: MATT_SKILLS, files: FILES, store: { mainFlow: true } })
   await implementing($)
   await $.tool.call({ tool: 'Read', file_path: 'work/coupons/issues/05-unlabelled.md' } as never)
   await request($, 'high', 1)
@@ -75,7 +75,7 @@ test('a ticket with no Model or Effort line is read by Haiku', async ($, on) => 
 })
 
 test('a sub-agent handed a ticket runs on the ticket’s model and effort', async ($, on) => {
-  const { calls } = engine(on, { haiku: LARGE, matt: MATT_SKILLS, files: FILES })
+  const { calls } = engine(on, { haiku: LARGE, matt: MATT_SKILLS, files: FILES, store: { mainFlow: true } })
   await implementing($)
   await $.tool.call({ tool: 'Agent', description: 'ticket 03', prompt: `Implement ${T3} with TDD.` } as never)
 
@@ -84,7 +84,7 @@ test('a sub-agent handed a ticket runs on the ticket’s model and effort', asyn
 })
 
 test('a ticket’s sub-agent climbs its effort to xhigh, then a model up, and stops at Opus without asking for Fable', async ($, on) => {
-  const { sent, bash } = engine(on, { haiku: LARGE, matt: MATT_SKILLS, files: FILES })
+  const { sent, bash } = engine(on, { haiku: LARGE, matt: MATT_SKILLS, files: FILES, store: { mainFlow: true } })
   await implementing($)
   await $.tool.call({ tool: 'Agent', tool_use_id: 'tu-3', description: 'ticket 03', prompt: `Implement ${T3} with TDD.` } as never)
   // The sub-agent's first turn starts with the Agent call's prompt, which names the ticket.
@@ -106,7 +106,7 @@ test('a ticket’s sub-agent climbs its effort to xhigh, then a model up, and st
 })
 
 test('outside the implement stage a ticket path in an Agent prompt changes nothing', async ($, on) => {
-  const { calls } = engine(on, { haiku: LARGE, matt: MATT_SKILLS, files: FILES })
+  const { calls } = engine(on, { haiku: LARGE, matt: MATT_SKILLS, files: FILES, store: { mainFlow: true } })
   await start($)
   await request($, 'high', 0)
   await type($, 'add coupons to checkout')
@@ -118,7 +118,7 @@ test('outside the implement stage a ticket path in an Agent prompt changes nothi
 })
 
 test('on a Sonnet session in the flow, a ticket with no Model line runs its sub-agent on the flow’s model', async ($, on) => {
-  const { calls } = engine(on, { haiku: LARGE, matt: MATT_SKILLS, files: FILES, model: 'claude-sonnet-5-5' })
+  const { calls } = engine(on, { haiku: LARGE, matt: MATT_SKILLS, files: FILES, model: 'claude-sonnet-5-5', store: { mainFlow: true } })
   await start($)
   await request($, 'high', 0, 'claude-sonnet-5-5')
   await type($, 'add coupons to checkout')
@@ -130,7 +130,7 @@ test('on a Sonnet session in the flow, a ticket with no Model line runs its sub-
 })
 
 test('a ticket path that ends a sentence is still the ticket', async ($, on) => {
-  const { calls } = engine(on, { haiku: LARGE, matt: MATT_SKILLS, files: FILES })
+  const { calls } = engine(on, { haiku: LARGE, matt: MATT_SKILLS, files: FILES, store: { mainFlow: true } })
   await implementing($)
   await $.tool.call({ tool: 'Agent', description: 'ticket 03', prompt: `Implement ${T3}. Then report back.` } as never)
 
@@ -139,7 +139,7 @@ test('a ticket path that ends a sentence is still the ticket', async ($, on) => 
 })
 
 test('a ticket that names only its model keeps that model, and Haiku reads its effort', async ($, on) => {
-  const { calls } = engine(on, { haiku: [LARGE, 'clarity=clear hard=no risky=no size=small model=haiku sure=90'], matt: MATT_SKILLS, files: FILES })
+  const { calls } = engine(on, { haiku: [LARGE, 'clarity=clear hard=no risky=no size=small model=haiku sure=90'], matt: MATT_SKILLS, files: FILES, store: { mainFlow: true } })
   await implementing($)
   await $.tool.call({ tool: 'Agent', description: 'ticket 06', prompt: 'Implement work/coupons/issues/06-model-only.md with TDD.' } as never)
 
@@ -148,7 +148,7 @@ test('a ticket that names only its model keeps that model, and Haiku reads its e
 })
 
 test('two hand-offs under one description each keep their own ticket', async ($, on) => {
-  const { sent, bash } = engine(on, { haiku: LARGE, matt: MATT_SKILLS, files: FILES })
+  const { sent, bash } = engine(on, { haiku: LARGE, matt: MATT_SKILLS, files: FILES, store: { mainFlow: true } })
   await implementing($)
   // Both calls are made before either agent starts: matched by description, the second would take the first's place.
   await $.tool.call({ tool: 'Agent', tool_use_id: 'tu-a', description: 'implement ticket', prompt: `Implement ${T3}.` } as never)
@@ -171,7 +171,7 @@ test('two hand-offs under one description each keep their own ticket', async ($,
 })
 
 test('a ticket with no Model line, handed out after the main session climbed to Fable 5.1, runs on the task’s model', async ($, on) => {
-  const { calls, bash } = engine(on, { haiku: LARGE, matt: MATT_SKILLS, files: FILES })
+  const { calls, bash } = engine(on, { haiku: LARGE, matt: MATT_SKILLS, files: FILES, store: { mainFlow: true } })
   await implementing($)
   // implement's high, then xhigh, then Fable 5.1.
   await fail($, bash)
@@ -183,7 +183,7 @@ test('a ticket with no Model line, handed out after the main session climbed to 
 })
 
 test('Haiku reads a ticket without lines once, while its text stays the same', async ($, on) => {
-  const { asked } = engine(on, { haiku: [LARGE, 'clarity=clear hard=no risky=no size=small model=sonnet sure=90'], matt: MATT_SKILLS, files: FILES })
+  const { asked } = engine(on, { haiku: [LARGE, 'clarity=clear hard=no risky=no size=small model=sonnet sure=90'], matt: MATT_SKILLS, files: FILES, store: { mainFlow: true } })
   await implementing($)
   await $.tool.call({ tool: 'Read', file_path: 'work/coupons/issues/05-unlabelled.md' } as never)
   await $.tool.call({ tool: 'Read', file_path: T3 } as never)
@@ -193,7 +193,7 @@ test('Haiku reads a ticket without lines once, while its text stays the same', a
 })
 
 test('a ticket\u2019s sub-agent is known from the Agent call\u2019s answer when its first turn named no ticket', async ($, on) => {
-  const { sent, bash } = engine(on, { haiku: LARGE, matt: MATT_SKILLS, files: FILES })
+  const { sent, bash } = engine(on, { haiku: LARGE, matt: MATT_SKILLS, files: FILES, store: { mainFlow: true } })
   await implementing($)
   // The Agent call answers with the agent's id (t3, by its description in the test engine).
   await $.tool.call({ tool: 'Agent', tool_use_id: 'tu-3', description: 'ticket 03', prompt: `Implement ${T3} with TDD.` } as never)
