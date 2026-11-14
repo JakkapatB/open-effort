@@ -33,7 +33,7 @@ test('hard work on Opus 4.6 goes out at high, since it takes no xhigh', async ($
   expect(sent.map(e => e.effort)).toEqual(['high'])
 })
 
-test('on Opus 4.6 the ladder skips xhigh, and after high offers Fable 5.1', async ($, on) => {
+test('on Opus 4.6 the ladder skips xhigh, and after high offers Fable 5.2', async ($, on) => {
   const { sent, bash, conversation } = engine(on, { haiku: CLEAR })
   await start($)
   await type($, 'rename getUser to fetchUser')
@@ -51,7 +51,7 @@ test('on Opus 4.6 the ladder skips xhigh, and after high offers Fable 5.1', asyn
     ['claude-opus-4-6', 'medium'],
     ['claude-opus-4-6', 'high'],
     ['claude-opus-4-6', 'high'],
-    ['claude-fable-5-1', 'high'],
+    ['claude-fable-5-2', 'high'],
   ])
 })
 

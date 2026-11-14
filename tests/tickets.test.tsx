@@ -170,10 +170,10 @@ test('two hand-offs under one description each keep their own ticket', async ($,
   expect(sent.filter(e => e.agentId === b).map(e => e.effort)).toEqual(['low', 'medium'])
 })
 
-test('a ticket with no Model line, handed out after the main session climbed to Fable 5.1, runs on the task’s model', async ($, on) => {
+test('a ticket with no Model line, handed out after the main session climbed to Fable 5.2, runs on the task’s model', async ($, on) => {
   const { calls, bash } = engine(on, { haiku: LARGE, matt: MATT_SKILLS, files: FILES })
   await implementing($)
-  // implement's high, then xhigh, then Fable 5.1.
+  // implement's high, then xhigh, then Fable 5.2.
   await fail($, bash)
   await fail($, bash)
   await $.tool.call({ tool: 'Agent', tool_use_id: 'tu-4', description: 'ticket 04', prompt: `Implement ${T4}.` } as never)

@@ -1,5 +1,5 @@
 import type { Engine } from 'claude-code/testing'
-import type { CommandPresentation, ModelCompleteInput, SessionMessage, ModelCompleteResult, On, PromptSubmitInput, TurnStepInput } from 'claude-code'
+import type { CommandPresentation, ModelCompleteInput, SessionMessage, ModelCompleteResult, On, PromptSubmitInput, TurnStepInput, TurnUsage } from 'claude-code'
 
 // The test runtime has timers; the mod's own type settings leave them out.
 declare global {
@@ -156,6 +156,11 @@ export function engine(on: On, options: EngineOptions = {}) {
   })
   on('turn.complete', (_, e) => ({ text: e.answer }))
   on('turn.start', (_, e) => ({ turnId: e.turnId }))
+  const toasts: string[] = []
+  on('ui.toast', (_, e) => {
+    toasts.push((e as { text?: string }).text ?? '')
+    return { value: undefined }
+  })
   const viewed: string[] = []
   on('ui.view', (_, e) => {
     viewed.push((e as { agentId?: string }).agentId ?? '')
@@ -183,17 +188,26 @@ export function engine(on: On, options: EngineOptions = {}) {
     if (text === undefined) throw new Error(`ENOENT: ${e.path}`)
     return { value: text }
   })
-  on('fs.exists', (_, e) => ({ value: fileAt(e.path) !== undefined }))
+  // How often the mod looked for a file or listed the session's commands: what a prompt costs before Haiku.
+  const looked = { files: 0, commands: 0 }
+  on('fs.exists', (_, e) => {
+    looked.files += 1
+    return { value: fileAt(e.path) !== undefined }
+  })
   on('command.register', () => ({ value: { command: 'open-effort' } }))
   on('tool.register', (_, e) => ({ value: { tool: `mcp__open-effort__${e.name}` } }))
   on('agent.list', () => ({ value: [...AGENTS] }))
-  on('command.list', () => ({
+  on('command.list', () => {
+    looked.commands += 1
+    return COMMANDS()
+  })
+  const COMMANDS = () => ({
     value: [
       { name: 'code-review', description: "Claude Code's own review", source: 'builtin' as const },
       ...(options.matt ?? []).map(name => ({ name: `mattpocock-skills:${name}`, description: name, source: 'plugin' as const, plugin: 'mattpocock-skills' })),
       ...(options.skills ?? []).map(s => ({ name: s.name, description: s.name, source: s.plugin ? ('plugin' as const) : ('user' as const), ...(s.plugin ? { plugin: s.plugin } : {}) })),
     ],
-  }))
+  })
   on('settings.read', () => ({ value: options.settings ?? {} }))
   const commands: { command: string; args: string }[] = []
   on('command.run', (_, e) => {
@@ -235,24 +249,31 @@ export function engine(on: On, options: EngineOptions = {}) {
     const { Text } = $.ui.resolve(e)
     return <Text>engine</Text>
   })
+  // The model answers every request; `api.usage` is what the next answers report of the prompt cache (default nothing).
+  // `api.down` names the models that answer nothing, as one the account cannot use does.
+  const api = { usage: null as Omit<TurnUsage, 'model'> | null, down: [] as string[] }
   on('turn.step', async function* (_, e) {
     sent.push(e)
-    return { turnId: e.turnId, index: e.index, answer: '', toolUses: [], stopReason: 'end_turn', usage: null }
+    if (api.down.includes(e.model)) return { turnId: e.turnId, index: e.index, answer: '', toolUses: [], stopReason: null, usage: null }
+    return { turnId: e.turnId, index: e.index, answer: '', toolUses: [], stopReason: 'end_turn', usage: api.usage ? { ...api.usage, model: e.model } : null }
   })
-  // Bash runs as told: `bash.passes` decides whether the next command exits 0.
-  const bash = { passes: true, notes: [] as string[], context: [] as string[] }
+  // Bash runs as told: `bash.passes` decides whether the next command exits 0, and `bash.ms` how long it runs.
+  const bash = { passes: true, notes: [] as string[], context: [] as string[], ms: 0 }
   const calls: Record<string, unknown>[] = []
-  on('tool.call', (_, e) => {
+  on('tool.call', async (_, e) => {
     calls.push(e as Record<string, unknown>)
+    // What the command exits with is settled as it starts, however long it runs.
+    const passes = bash.passes
+    if (e.tool === 'Bash' && bash.ms > 0) await new Promise(resolve => setTimeout(resolve, bash.ms))
     // The Agent tool answers with the id of the agent it started: the one the list gives its description.
     if (e.tool === 'Agent') {
       const listed = AGENTS.find(a => a.description === (e as { description?: string }).description)
       return { result: listed ? { agentId: listed.id } : {}, text: 'started' }
     }
     const context = bash.context.length > 0 ? { context: bash.context } : {}
-    return bash.passes ? { result: {}, text: 'ok', ...context } : { result: {}, text: 'Exit code 1', isError: true, ...context }
+    return passes ? { result: {}, text: 'ok', ...context } : { result: {}, text: 'Exit code 1', isError: true, ...context }
   })
-  return { sent, asked, submitted, bash, opened, written, clock, calls, viewed, where, store, conversation, fetched, ran, commands, timers, timerPeriods }
+  return { sent, asked, submitted, bash, api, looked, toasts, opened, written, clock, calls, viewed, where, store, conversation, fetched, ran, commands, timers, timerPeriods }
 }
 
 export const DAY_MS = 24 * 60 * 60 * 1000

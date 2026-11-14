@@ -1,6 +1,7 @@
-import type { Clarity, Effort, HistoryEntry, Language, Score, Stage } from '../types'
+import type { CacheRule } from './policy'
+import type { CacheUse, Clarity, Effort, HistoryEntry, Language, Score, Stage } from '../types'
 import type { ThemeId } from './diagrams'
-import { FAILS_TO_STALL, isFable } from './policy'
+import { FABLE_MODEL, FAILS_TO_STALL, FRONTIER_MODEL, isFable } from './policy'
 import type { FlowModel } from './policy'
 import { isUnsure } from './score'
 
@@ -24,14 +25,16 @@ export type Words = {
   commandDescription: string
   /**
    * The band: the flow (by `flow`, its name) and stage if in one, the effort in use (null: the session's own, not seen
-   * yet), on Fable 5.1 or not, and why.
+   * yet), the Fable model a climb reached by its name (null: none), and why.
    */
-  band: (effort: Effort | null, isOnFable: boolean, why: Why, stage: Stage | null, flow: string) => string
+  band: (effort: Effort | null, fable: string | null, why: Why, stage: Stage | null, flow: string) => string
   /** Why the effort is what it is, alone: the band's reason. */
   reason: (why: Why) => string
   /** The band's steps: what the mod did and does, and the values it shows. */
   steps: StepWords
   status: (isOn: boolean) => string
+  /** A model the mod moved the task to did not answer: the task goes on, on the session's own. */
+  modelUnavailable: (model: string, own: string) => string
   onlyPerson: string
   /** Only the person can ask for their own flow. */
   onlyPersonFlow: string
@@ -93,6 +96,13 @@ export type PaneWords = {
   updates: string
   holdEffort: string
   holdEffortNote: string
+  /**
+   * What the hold does on the session's model, by its name: whether a change of effort restarts its prompt cache
+   * (`isBound`), and whether this machine's own requests showed it (`rule`) or the measured list says so.
+   */
+  holdEffortOn: (model: string, isBound: boolean, rule: CacheRule | null) => string
+  /** How much of the main session's prompts the cache served this session. */
+  cacheUse: (use: CacheUse) => string
   /** The band's buttons: a new version is out, and one is installed and not yet loaded. */
   bandUpdate: string
   bandReload: string
@@ -133,7 +143,7 @@ export type PaneWords = {
   entry: (entry: HistoryEntry) => string
   /** A history entry's headline: the efforts its requests went out at, a climb marked. */
   entryTitle: (entry: HistoryEntry) => string
-  /** A line over the recent turns: how many climbed and how many reached Fable 5.1. */
+  /** A line over the recent turns: how many climbed and how many ran on Fable. */
   summary: (entries: readonly HistoryEntry[]) => string
   chart: { climbed: string; changed: string; models: string; fable: string; started: string; turns: string }
 }
@@ -163,10 +173,10 @@ function reasonOf(p: Phrases) {
 }
 
 function bandOf(p: Phrases) {
-  return (effort: Effort | null, isOnFable: boolean, why: Why, stage: Stage | null, flow: string): string => {
+  return (effort: Effort | null, fable: string | null, why: Why, stage: Stage | null, flow: string): string => {
     if (!effort) return `open-effort · ${p.noEffort}`
     const reason = reasonOf(p)(why)
-    return `open-effort · ${stage ? `${flow}: ${stage} · ` : ''}${isOnFable ? 'Fable 5.1 · ' : ''}effort ${effort} · ${reason}`
+    return `open-effort · ${stage ? `${flow}: ${stage} · ` : ''}${fable ? `${fable} · ` : ''}effort ${effort} · ${reason}`
   }
 }
 
@@ -175,12 +185,30 @@ export function clockTime(at: number): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
-/** A model as people say it: `claude-opus-5-5` is Opus 5.5; none seen yet is the session's. */
+/**
+ * A model as people say it: `claude-opus-5-5` is Opus 5.5 and `claude-fable-5` is Fable 5, whatever a platform puts
+ * before the id (`anthropic.`) or after it (a date, `[1m]`); none seen yet is the session's.
+ */
 export function modelName(model: string | null): string {
   if (!model) return 'session'
-  if (isFable(model)) return 'Fable 5.1'
-  const m = /^claude-([a-z]+)-(\d+)-(\d+)/.exec(model)
-  return m && m[1] ? `${m[1][0]?.toUpperCase()}${m[1].slice(1)} ${m[2]}.${m[3]}` : model.replace(/^claude-/, '')
+  // The family, then its version in one or two numbers: a date after them is not part of the name.
+  const m = /claude-([a-z]+)-(\d{1,2})(?:-(\d{1,2}))?(?!\d)/.exec(model)
+  return m && m[1] ? `${m[1][0]?.toUpperCase()}${m[1].slice(1)} ${m[2]}${m[3] ? `.${m[3]}` : ''}` : model.replace(/^claude-/, '')
+}
+
+// The models the mod moves a task to, as the pane names them.
+const FABLE = modelName(FABLE_MODEL)
+const FRONTIER = modelName(FRONTIER_MODEL)
+
+/** A count of tokens in a few characters: 950, 12.3K, 1.2M. */
+function tokens(n: number): string {
+  return n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1000 ? `${(n / 1000).toFixed(1)}K` : String(n)
+}
+
+/** The share of a session's prompt tokens the cache served, as a whole percent. */
+function cacheShare(use: CacheUse): number {
+  const all = use.read + use.written + use.fresh
+  return all > 0 ? Math.round((use.read / all) * 100) : 0
 }
 
 function entryLine(p: Phrases, why: { read: string; none: string; stage: string }, started: (effort: Effort) => string) {
@@ -253,6 +281,7 @@ const EN: Words = {
     viewUnavailable: "This app can't open an agent from the band. Open it from the app's own task list.",
   },
   status: isOn => (isOn ? 'on for this project.' : 'off for this project: it changes nothing here until you turn it on with /open-effort on.'),
+  modelUnavailable: (model, own) => `open-effort: ${model} did not answer. It may not be available on this account. This session goes on with ${own}.`,
   onlyPerson: 'only the person can switch it, by typing /open-effort on or off.',
   onlyPersonFlow: 'only the person can ask for their own flow, by typing /open-effort flow.',
   flowWriting: 'Claude will ask you about your flow, then write .claude/open-effort.json once you agree.',
@@ -274,6 +303,11 @@ const EN: Words = {
     updates: 'Updates',
     holdEffort: 'Hold the effort to keep the prompt cache',
     holdEffortNote: 'On models where changing the effort restarts the prompt cache, it changes only for a new task or when work is stuck.',
+    holdEffortOn: (model, isBound, rule) =>
+      isBound
+        ? rule ? `${model}: a change of effort restarted the cache in this machine's own requests, so the effort is held.` : `${model}: not yet seen to keep its cache through a change of effort, so the effort is held.`
+        : rule ? `${model}: kept its cache through changes of effort in this machine's own requests, so the effort is free.` : `${model}: measured to keep its cache through a change of effort, so the effort is free.`,
+    cacheUse: use => `Prompt cache this session: ${cacheShare(use)}% read · ${tokens(use.read)} of ${tokens(use.read + use.written + use.fresh)} prompt tokens · ${use.requests} requests`,
     bandUpdate: '↑ Update',
     bandReload: '↻ Reload',
     installed: v => `Installed: ${v}`,
@@ -300,10 +334,10 @@ const EN: Words = {
     language: 'Language',
     theme: 'Theme',
     flowModel: 'Model for the flow',
-    flowModels: { frontier: 'Frontier · Opus 5.5', fable: 'Fable 5.1', session: "Session's model" },
+    flowModels: { frontier: `Frontier · ${FRONTIER}`, fable: FABLE, session: "Session's model" },
     flowModelLimits: {
-      frontier: 'Every stage runs on Opus 5.5. A session on a smaller model switches once as the flow starts: the prompt cache starts afresh, and it costs more than Sonnet. A session on Fable 5.1 stays on it.',
-      fable: 'Every stage runs on Fable 5.1, the most capable model: the most expensive per token, and its turns run longer. The prompt cache starts afresh as the flow starts.',
+      frontier: `Every stage runs on ${FRONTIER}. A session on a smaller model switches once as the flow starts: the prompt cache starts afresh, and it costs more than Sonnet. A session on Fable stays on it.`,
+      fable: `Every stage runs on ${FABLE}, the most capable model: the most expensive per token, and its turns run longer. The prompt cache starts afresh as the flow starts. A session already on a Fable model stays on it.`,
       session: "The flow stays on the session's model: no switch, the cache holds. On a smaller model, planning and review stages may come out weaker.",
     },
     themes: { claude: 'Claude', lime: 'Lime', ocean: 'Ocean', rose: 'Rose' },
@@ -312,11 +346,11 @@ const EN: Words = {
     noHistory: 'No turns yet.',
     entry: entryLine(EN_PHRASES, { read: 'Haiku:', none: 'no score, the session\'s own', stage: 'Flow:' }, e => `start ${e}`),
     entryTitle: entryTitleOf(n => `climbed ${n}`),
-    chart: { climbed: 'climbed', changed: 'changed mid-turn', models: 'Model · effort the turns started at', fable: 'Fable 5.1', started: 'Where turns start', turns: 'started at' },
+    chart: { climbed: 'climbed', changed: 'changed mid-turn', models: 'Model · effort the turns started at', fable: 'Fable', started: 'Where turns start', turns: 'started at' },
     summary: es => {
       const climbs = es.filter(e => e.climbs > 0).length
       const fable = es.filter(e => e.models.some(isFable)).length
-      return `${es.length} turns · ${climbs} climbed · ${fable} on Fable 5.1`
+      return `${es.length} turns · ${climbs} climbed · ${fable} on Fable`
     },
   },
 }
@@ -348,6 +382,7 @@ const TH: Words = {
     viewUnavailable: 'แอปนี้เปิด agent จากแถบนี้ไม่ได้ ให้เปิดจากรายการ task ของแอปแทน',
   },
   status: isOn => (isOn ? 'เปิดอยู่ในโปรเจกต์นี้' : 'ปิดอยู่ในโปรเจกต์นี้: จะไม่เปลี่ยนอะไรจนกว่าคุณจะพิมพ์ /open-effort on'),
+  modelUnavailable: (model, own) => `open-effort: ${model} ไม่ตอบกลับ บัญชีนี้อาจยังใช้โมเดลนี้ไม่ได้ session นี้จะใช้ ${own} ต่อ`,
   onlyPerson: 'เปิดหรือปิดได้เฉพาะผู้ใช้ โดยพิมพ์ /open-effort on หรือ off',
   onlyPersonFlow: 'ขอ flow ของตัวเองได้เฉพาะผู้ใช้ โดยพิมพ์ /open-effort flow',
   flowWriting: 'Claude จะถามคุณเรื่อง flow แล้วเขียน .claude/open-effort.json เมื่อคุณตกลง',
@@ -369,6 +404,11 @@ const TH: Words = {
     updates: 'อัปเดต',
     holdEffort: 'คง effort ไว้เพื่อรักษา prompt cache',
     holdEffortNote: 'บนโมเดลที่เปลี่ยน effort แล้ว prompt cache เริ่มใหม่ effort จะเปลี่ยนเฉพาะตอนเริ่มงานใหม่หรือตอนงานติด',
+    holdEffortOn: (model, isBound, rule) =>
+      isBound
+        ? rule ? `${model}: เครื่องนี้เคยเปลี่ยน effort แล้ว cache เริ่มใหม่ จึงคง effort ไว้` : `${model}: ยังไม่เคยเห็นว่าเปลี่ยน effort แล้ว cache ยังอยู่ จึงคง effort ไว้ก่อน`
+        : rule ? `${model}: เครื่องนี้เปลี่ยน effort แล้ว cache ยังอยู่ จึงปรับ effort ได้อิสระ` : `${model}: วัดไว้แล้วว่าเปลี่ยน effort แล้ว cache ยังอยู่ จึงปรับ effort ได้อิสระ`,
+    cacheUse: use => `prompt cache ของ session นี้: อ่านจาก cache ${cacheShare(use)}% · ${tokens(use.read)} จาก ${tokens(use.read + use.written + use.fresh)} token · ${use.requests} request`,
     bandUpdate: '↑ อัปเดต',
     bandReload: '↻ โหลดใหม่',
     installed: v => `ที่ติดตั้งอยู่: ${v}`,
@@ -395,10 +435,10 @@ const TH: Words = {
     language: 'ภาษา',
     theme: 'ธีมสี',
     flowModel: 'โมเดลของ flow',
-    flowModels: { frontier: 'Frontier · Opus 5.5', fable: 'Fable 5.1', session: 'ตามโมเดลของ session' },
+    flowModels: { frontier: `Frontier · ${FRONTIER}`, fable: FABLE, session: 'ตามโมเดลของ session' },
     flowModelLimits: {
-      frontier: 'ทุก stage ใช้ Opus 5.5 ถ้า session ใช้โมเดลที่เล็กกว่า จะเปลี่ยนครั้งเดียวตอนเข้า flow: prompt cache เริ่มใหม่ และแพงกว่า Sonnet ถ้า session ใช้ Fable 5.1 อยู่แล้วจะใช้ต่อ',
-      fable: 'ทุก stage ใช้ Fable 5.1 โมเดลที่เก่งที่สุด: แพงที่สุดต่อ token และแต่ละ turn ใช้เวลานานกว่า prompt cache เริ่มใหม่ตอนเข้า flow',
+      frontier: `ทุก stage ใช้ ${FRONTIER} ถ้า session ใช้โมเดลที่เล็กกว่า จะเปลี่ยนครั้งเดียวตอนเข้า flow: prompt cache เริ่มใหม่ และแพงกว่า Sonnet ถ้า session ใช้ Fable อยู่แล้วจะใช้ต่อ`,
+      fable: `ทุก stage ใช้ ${FABLE} โมเดลที่เก่งที่สุด: แพงที่สุดต่อ token และแต่ละ turn ใช้เวลานานกว่า prompt cache เริ่มใหม่ตอนเข้า flow ถ้า session ใช้ Fable อยู่แล้วจะใช้ต่อ`,
       session: 'ใช้โมเดลของ session ตลอด flow: ไม่เปลี่ยนโมเดล cache ไม่เสีย แต่ถ้าเป็นโมเดลที่เล็กกว่า stage วางแผนและ review อาจออกมาด้อยกว่า',
     },
     themes: { claude: 'Claude', lime: 'มะนาว', ocean: 'ฟ้า', rose: 'ชมพู' },
@@ -407,11 +447,11 @@ const TH: Words = {
     noHistory: 'ยังไม่มี turn',
     entry: entryLine(TH_PHRASES, { read: 'Haiku:', none: 'ไม่มีคะแนน ใช้ของ session', stage: 'Flow:' }, e => `เริ่ม ${e}`),
     entryTitle: entryTitleOf(n => `ไต่ขึ้น ${n}`),
-    chart: { climbed: 'ไต่ขึ้น', changed: 'เปลี่ยนกลาง turn', models: 'โมเดล · effort ที่ turn เริ่ม', fable: 'Fable 5.1', started: 'turn เริ่มที่ระดับไหน', turns: 'เริ่มที่' },
+    chart: { climbed: 'ไต่ขึ้น', changed: 'เปลี่ยนกลาง turn', models: 'โมเดล · effort ที่ turn เริ่ม', fable: 'Fable', started: 'turn เริ่มที่ระดับไหน', turns: 'เริ่มที่' },
     summary: es => {
       const climbs = es.filter(e => e.climbs > 0).length
       const fable = es.filter(e => e.models.some(isFable)).length
-      return `${es.length} turn · ไต่ขึ้น ${climbs} · ใช้ Fable 5.1 ${fable}`
+      return `${es.length} turn · ไต่ขึ้น ${climbs} · ใช้ Fable ${fable}`
     },
   },
 }

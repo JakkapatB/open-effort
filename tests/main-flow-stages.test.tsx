@@ -315,7 +315,7 @@ test('entering the Main Flow moves a Sonnet session’s task to the frontier mod
   ])
 })
 
-test('the pane picks Fable 5.1 or the session’s model for the Main Flow, and says what each costs', async ($, on) => {
+test('the pane picks Fable 5.2 or the session’s model for the Main Flow, and says what each costs', async ($, on) => {
   const { sent } = await flow(on, { model: 'claude-sonnet-5-5' })
   await start($)
   await request($, 'high', 0, 'claude-sonnet-5-5')
@@ -333,7 +333,7 @@ test('the pane picks Fable 5.1 or the session’s model for the Main Flow, and s
   await type($, 'add gift cards to checkout')
   await stage($, 'grill')
   await request($, 'high', 2, 'claude-sonnet-5-5')
-  expect(sent.at(-1)?.model).toBe('claude-fable-5-1')
+  expect(sent.at(-1)?.model).toBe('claude-fable-5-2')
 })
 
 test('a session already on Fable 5.1 keeps it in the Main Flow', async ($, on) => {
@@ -491,7 +491,7 @@ test('a flow the person starts while a score is on its way stays when the score 
   expect(await bandText($)).toContain('Main Flow: spec')
 })
 
-test('Fable 5.1 a climb reached in one stage is left behind as the next stage starts', async ($, on) => {
+test('Fable 5.2 a climb reached in one stage is left behind as the next stage starts', async ($, on) => {
   const { sent, bash, conversation } = await flow(on)
   await start($)
   await type($, 'add coupons to checkout')
@@ -500,7 +500,7 @@ test('Fable 5.1 a climb reached in one stage is left behind as the next stage st
   askPerson(conversation)
   await answerOffer($, 'up')
   expect((await effortNow($, sent))).toBe('high')
-  expect(sent.at(-1)?.model).toBe('claude-fable-5-1')
+  expect(sent.at(-1)?.model).toBe('claude-fable-5-2')
   await stage($, 'retro')
 
   expect(await effortNow($, sent, 1)).toBe('medium')

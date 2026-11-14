@@ -40,7 +40,7 @@ test('a general-purpose sub-agent starts at the task’s starting effort, not at
   expect(await spawn($, calls, {})).toEqual({ model: undefined, effort: 'medium' })
 })
 
-test('after the main session climbed to Fable 5.1, a new sub-agent still starts on the task’s model', async ($, on) => {
+test('after the main session climbed to Fable 5.2, a new sub-agent still starts on the task’s model', async ($, on) => {
   const { calls, bash, conversation } = engine(on, { haiku: 'clarity=clear hard=yes risky=no size=small' })
   await start($)
   await type($, 'fix the race in the cart lock')

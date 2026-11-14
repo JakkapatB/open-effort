@@ -5,6 +5,9 @@ import type { Clarity, ModelTier, Score, Size } from '../types'
 /** How long a prompt waits for Haiku to score it; past this it goes at the session's effort. */
 export const SCORE_TIMEOUT_MS = 15000
 
+/** How long a prompt waits once a score ran out of time, until Haiku answers again. */
+export const SCORE_RETRY_TIMEOUT_MS = 5000
+
 /** Haiku's instructions: one line of readings, in the words parseScore reads. */
 export const SCORE_SYSTEM = [
   'You score one request a person typed to a coding agent. Reply with exactly one line and nothing else:',

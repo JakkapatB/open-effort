@@ -53,7 +53,7 @@ export type Flow = {
 /** The flow the project uses, the file it came from (null: none, Matt Pocock's), and what keeps the file from use. */
 export type FlowState = { flow: Flow; file: string | null; problem: string | null }
 
-/** A rung of the ladder: an effort, and whether it runs on Fable 5.1. */
+/** A rung of the ladder: an effort, and whether it runs on Fable. */
 export type Rung = { effort: Effort; isFable: boolean }
 
 /** The task under way. */
@@ -65,7 +65,7 @@ export type Task = {
   climbed: Rung | null
   /** Failing checks in a row on the rung it stands on. */
   fails: number
-  /** Whether it reached Fable 5.1, which it keeps to its end. */
+  /** Whether it reached Fable, which it keeps to its end. */
   isOnFable: boolean
   /**
    * The model a climb moved it to once the person agreed, one family up from the one it ran on; kept to its end (in a
@@ -133,6 +133,21 @@ export type Switches = { machine: boolean; project: boolean | null; flowMachine:
 export type HeldEffort = { effort: Effort; carried: Effort | null; model: string; at: number; messageCount: number }
 
 /**
+ * A main-session request as the prompt cache saw it: when it went out, the model it named and the one that answered,
+ * its effort, how many messages it carried, and its prompt in tokens (fresh, read from the cache and written to it).
+ */
+export type CacheMark = { model: string; answered: string; effort: Effort; at: number; messageCount: number; prompt: number }
+
+/** What a model showed when the effort changed between two requests: the changes in a row that kept the prompt cache, and whether the last one lost it. */
+export type CacheSeen = { kept: number; isLost: boolean }
+
+/**
+ * The main session's prompt tokens this session: read from the cache, written to it, and neither; with its last
+ * request's mark, and the prompt of the first request on that model (`base`).
+ */
+export type CacheUse = { read: number; written: number; fresh: number; requests: number; base: number; last: CacheMark | null }
+
+/**
  * Updates of the mod itself: whether it reads the newest version daily, the installed and newest versions, whether a
  * read is running, and the step an update is at. A read and an update run apart, so neither overwrites the other.
  */
@@ -197,7 +212,7 @@ declare module 'claude-code' {
       /** The sub-agents working now, by id. */
       running: string[]
       /** What the mod last saw, for its report tool: how the last score went, and the last request's own effort and model. */
-      seenLast: { score: string; effort: string; model: string; starts: number; haikuCalls?: number; view?: string }
+      seenLast: { score: string; effort: string; model: string; starts: number; haikuCalls?: number; view?: string; scoreMs?: number }
       /** The session's sub-agents by id, the latest ones kept. */
       agents: Record<string, SubAgent>
       /** Tickets handed to sub-agents not yet started, by the Agent call's tool_use_id. */
@@ -216,6 +231,15 @@ declare module 'claude-code' {
       heldEffort: HeldEffort | null
       /** Whether to hold the effort on models where changing it restarts the prompt cache. */
       isHoldingEffort: boolean
+      /**
+       * The models the mod moved a request to this session: the ones that answered, and the ones that did not answer
+       * their first request (not on this account, or not on this platform), which no request moves to again.
+       */
+      moved: { answered: string[]; failed: string[] }
+      /** The main session's use of the prompt cache this session. */
+      cache: CacheUse
+      /** What each model showed when the effort changed, by the id requests name it with; kept in the store for the machine. */
+      cacheSeen: Record<string, CacheSeen>
       /** Whether the main session wrote a test since its last check. */
       isRed: boolean
       /** Haiku's readings of tickets without Model and Effort lines, by path, with the text read. */

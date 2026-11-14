@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, PromptOrigin, Register, RenderChildren, Timer } from 'claude-code'
+import type { EngineInterface, PromptOrigin, Register, RenderChildren, Timer, TurnStepInput, TurnUsage } from 'claude-code'
 
-import type { Declined, Effort, Flow, FlowState, HistoryEntry, Language, LanguageChoice, ModelTier, Project, Stage, SubAgent, Switches, Task, TicketSetting, TurnLog, UpdateState, HeldEffort } from '../types'
+import type { CacheMark, CacheSeen, CacheUse, Declined, Effort, Flow, FlowState, HeldEffort, HistoryEntry, Language, LanguageChoice, ModelTier, Project, Stage, SubAgent, Switches, Task, TicketSetting, TurnLog, UpdateState } from '../types'
 import { checkRun, isTestFile } from './checks'
 import { THEMES, THEME_IDS, agentsSvg, bandKeys, historySvg, isThemeId, stageSvg, stepsSvg, useTheme } from './diagrams'
 import type { Loop, Step, ThemeId } from './diagrams'
@@ -13,9 +13,9 @@ import { IMPLEMENT_NOTE, MODEL_TOOL_SPEC, STAGE_TOOL, STAGE_TOOL_SPEC, askNote, 
 import {
   EFFORTS, FABLE_MODEL, FAILS_TO_STALL, FLOW_MODELS, FRESH_TASK, TIER_MODEL, afterAgentCheck, afterCheck, afterTicketAgentCheck, climbedTo, enteredStage, enteredTicket,
   fitEffort, flowModelFor, isBuiltInAgent, isEffort, isFable, isFlowModel, modelUp, rungOf, startingEffort, subAgentStart, supportedEfforts, taskModel, usedStageSkill,
-  isSizeAtMost, isTierAtMost, largerSize, ticketLinesOf, tierOf, keptEffort } from './policy'
-import type { FlowModel } from './policy'
-import { SCORE_SYSTEM, SCORE_TIMEOUT_MS, isGoOn, isUnsure, scorePrompt, scoredFrom } from './score'
+  isSizeAtMost, isTierAtMost, largerSize, ticketLinesOf, tierAbove, tierOf, keptEffort, cacheRuleOf, cacheSeenBy, cacheSeenFrom, isEffortBound, withCacheSeen } from './policy'
+import type { CacheRule, FlowModel } from './policy'
+import { SCORE_RETRY_TIMEOUT_MS, SCORE_SYSTEM, SCORE_TIMEOUT_MS, isGoOn, isUnsure, scorePrompt, scoredFrom } from './score'
 import type { Scored } from './score'
 import { CHECK_EVERY_MS, CHECK_TIMEOUT_MS, LOOK_EVERY_MS, FIND_CLAUDE, MANUAL_COMMAND, RELEASES_URL, UPDATE_PROMPT, UPDATE_STEPS, UPDATE_TIMEOUT_MS, UPDATE_URL, isNewer, newerOf, reasonOf, updateCommand, versionOf } from './update'
 import { clockTime, languageOf, modelName, wordsFor } from './words'
@@ -52,6 +52,14 @@ const isScoring = atom({ plugin: 'open-effort', key: 'isScoring' } as const, fal
 // The task as it stood when the prompt now being scored was typed: what changed since is kept when the score comes.
 const heldEffort = atom({ plugin: 'open-effort', key: 'heldEffort' } as const, null as HeldEffort | null)
 const isHoldingEffort = atom({ plugin: 'open-effort', key: 'isHoldingEffort' } as const, true)
+// The main session's prompt tokens this session as the cache served them, and its last request's mark.
+const NO_CACHE_USE: CacheUse = { read: 0, written: 0, fresh: 0, requests: 0, base: 0, last: null }
+const cache = atom({ plugin: 'open-effort', key: 'cache' } as const, NO_CACHE_USE)
+// The models the mod moved a request to this session: the ones that answered, and the ones that did not answer
+// their first request, which no request moves to again.
+const moved = atom({ plugin: 'open-effort', key: 'moved' } as const, { answered: [] as string[], failed: [] as string[] })
+// What each model showed when the effort changed between two requests: the machine's, from the store.
+const cacheSeen = atom({ plugin: 'open-effort', key: 'cacheSeen' } as const, {} as Record<string, CacheSeen>)
 const before = atom({ plugin: 'open-effort', key: 'before' } as const, FRESH_TASK as Task)
 // What the person turned down this session: the largest work they chose to do without the Main Flow, and the most
 // capable model they chose not to move to. Neither is asked about again for work no larger.
@@ -108,7 +116,10 @@ async function testWritten($: EngineInterface, agentId: string | undefined, path
  * out, fails or answers none.
  */
 async function scoreRequest($: EngineInterface, text: string, said?: string): Promise<Scored> {
-  const res = await $.model.complete({ model: 'haiku', system: SCORE_SYSTEM, prompt: scorePrompt(text, said), maxTokens: 64, effort: 'low', timeoutMs: SCORE_TIMEOUT_MS })
+  // After a score that ran out of time, the next ones wait less, until Haiku answers again: a slow Haiku holds one prompt long, not every one.
+  const timeoutMs = isHaikuSlow ? SCORE_RETRY_TIMEOUT_MS : SCORE_TIMEOUT_MS
+  const res = await $.model.complete({ model: 'haiku', system: SCORE_SYSTEM, prompt: scorePrompt(text, said), maxTokens: 64, effort: 'low', timeoutMs })
+  isHaikuSlow = !res.isAnswered && res.reason === 'aborted'
   return scoredFrom(res)
 }
 
@@ -138,6 +149,7 @@ const STORE_LANGUAGE = 'language'
 const STORE_THEME = 'theme'
 const STORE_CHECK_UPDATES = 'checkUpdates'
 const STORE_HOLD_EFFORT = 'holdEffort'
+const STORE_CACHE_SEEN = 'cacheSeen'
 // The last read of the newest version: when, and what it found.
 const STORE_LATEST = 'latestVersion'
 
@@ -375,6 +387,85 @@ function withContext<T extends { context?: readonly string[] }>(carrier: T, note
 }
 
 /**
+ * A hook that waited (on Haiku, on a tool that ran for minutes) reads atoms as they stood when it started. A write
+ * moves it to now, so what it reads next is current: this one changes nothing.
+ */
+async function readAfresh($: EngineInterface): Promise<void> {
+  await update($, seenLast, last => last)
+}
+
+/** What this machine's requests showed of a model's cache when the effort changed; null until they showed enough. */
+async function cacheRule($: EngineInterface, model: string | null): Promise<CacheRule | null> {
+  return model ? cacheRuleOf((await read($, cacheSeen))[model]) : null
+}
+
+/** Whether a model did not answer when a request was moved to it this session: it is not on this account, or not on this platform. */
+async function isUnusable($: EngineInterface, model: string | null): Promise<boolean> {
+  return model !== null && (await read($, moved)).failed.includes(model)
+}
+
+/**
+ * A request the mod moved to `model` came back, answered or not. A model that never answered this session and does
+ * not answer now is given up for the session: the main session's task goes back to the session's own model (`own`),
+ * and the person is told. One that answered before only failed for the moment, and stays.
+ */
+async function movedTo($: EngineInterface, model: string, own: string, isAnswered: boolean, isMain: boolean): Promise<void> {
+  const known = await read($, moved)
+  if (known.answered.includes(model) || known.failed.includes(model)) return
+  await update($, moved, m => (isAnswered ? { ...m, answered: [...m.answered.filter(id => id !== model), model] } : { ...m, failed: [...m.failed.filter(id => id !== model), model] }))
+  if (isAnswered) return
+  if (isMain) {
+    await setTask($, (t): Task => {
+      const model_ = t.model === model ? null : t.model
+      const climbModel = t.climbModel === model ? null : t.climbModel
+      const onFable = isFable(climbModel ?? model_)
+      // A rung on Fable goes with the Fable model; an offer of the model that did not answer is taken back.
+      return { ...t, model: model_, climbModel, isOnFable: onFable, climbed: t.climbed?.isFable && !onFable ? null : t.climbed, modelOffer: null, isClimbOffer: false }
+    })
+  }
+  $.ui.toast(wordsFor(await read($, language)).modelUnavailable(modelName(model), modelName(own)))
+}
+
+/** Models whose cache behaviour is kept, the ones seen last. */
+const CACHE_MODELS_KEPT = 24
+
+/**
+ * A main-session request was answered: its prompt tokens join the session's count. When the effort changed since
+ * the request before it, what the cache did then is kept for the model, here and in the store, so the hold follows
+ * what this machine's requests show and not only the measured list.
+ */
+async function cacheUsed($: EngineInterface, sent: TurnStepInput, usage: TurnUsage, at: number): Promise<void> {
+  // A provider that reports no cache counts reports nothing to count.
+  const read_ = usage.cache_read_input_tokens || 0
+  const written = usage.cache_creation_input_tokens || 0
+  const fresh = usage.input_tokens || 0
+  const prompt = fresh + read_ + written
+  const mark: CacheMark | null = isEffort(sent.effort) ? { model: sent.model, answered: usage.model, effort: sent.effort, at, messageCount: sent.messageCount, prompt } : null
+  const got: { seen: 'kept' | 'lost' | null } = { seen: null }
+  await update($, cache, (use): CacheUse => {
+    const before = use.last?.model === sent.model ? use.last : null
+    // The first request seen on a model: its prompt is the system prompt and the tools, and little conversation.
+    const base = before && use.base > 0 ? use.base : prompt
+    got.seen = mark ? cacheSeenBy(before, base, mark, read_) : null
+    return { read: use.read + read_, written: use.written + written, fresh: use.fresh + fresh, requests: use.requests + 1, base, last: mark }
+  })
+  const outcome = got.seen
+  if (!outcome) return
+  // Nothing new: the model did again what this session already knows of it.
+  const known = (await read($, cacheSeen))[sent.model]
+  const next = withCacheSeen(known, outcome)
+  if (known && known.kept === next.kept && known.isLost === next.isLost) return
+  // The store's entry is the machine's: another session may have seen this model since this one started.
+  const stored = cacheSeenFrom(await $.store.get(STORE_CACHE_SEEN))
+  const all = await update($, cacheSeen, mine => {
+    const merged = { ...mine, ...stored }
+    const next = withCacheSeen(merged[sent.model], outcome)
+    return Object.fromEntries([...Object.entries(merged).filter(([id]) => id !== sent.model), [sent.model, next] as const].slice(-CACHE_MODELS_KEPT))
+  })
+  await $.store.set(STORE_CACHE_SEEN, all)
+}
+
+/**
  * A Main Flow stage was started: the task takes the stage's effort. The person's own stage command may start the
  * flow; Claude's stage tool may start it after the mod asked the person about it, or to bring back a flow the
  * conversation shows under way (a resumed session). Only those two move a task between stages. Nothing moves while
@@ -390,7 +481,8 @@ async function moveToStage($: EngineInterface, stage: Stage, by: StageMover): Pr
   if (!effort) return { outcome: 'off', notes: [] }
   // Entering the flow moves the task to the model picked for it (the frontier model by default), never down.
   if (t.stage === null) await update($, heldEffort, () => null)
-  const moveTo = t.stage === null ? flowModelFor(await read($, flowModel), taskModel(t, await read($, sessionModel))) : null
+  const flowTo = t.stage === null ? flowModelFor(await read($, flowModel), taskModel(t, await read($, sessionModel))) : null
+  const moveTo = (await isUnusable($, flowTo)) ? null : flowTo
   await setTask($, (current): Task => ({
     ...enteredStage(current, stage, effort),
     ...(moveTo ? { model: moveTo, isOnFable: current.isOnFable || isFable(moveTo) } : {}),
@@ -440,7 +532,8 @@ async function stageSign($: EngineInterface, agentId: string | undefined, stage:
   if (t.stage === stage) return
   const floor = stageEffort(await flowOf($), stage)
   if (!floor) return
-  const moveTo = t.stage === null && (await isFlowAvailable($)) ? flowModelFor(await read($, flowModel), taskModel(t, await read($, sessionModel))) : null
+  const flowTo = t.stage === null && (await isFlowAvailable($)) ? flowModelFor(await read($, flowModel), taskModel(t, await read($, sessionModel))) : null
+  const moveTo = (await isUnusable($, flowTo)) ? null : flowTo
   const own = await read($, sessionEffort)
   await setTask($, current => usedStageSkill(current, stage, floor, own, moveTo))
 }
@@ -536,7 +629,7 @@ async function applyScore($: EngineInterface, scored: Scored, generation: number
   // down already this session: they are asked first.
   const own = await sessionModelNow($)
   const up = isUnsure(score) ? null : modelUp(score.model, own)
-  const offer = up && !(said.model && isTierAtMost(up, said.model)) ? up : null
+  const offer = up && !(said.model && isTierAtMost(up, said.model)) && !(await isUnusable($, TIER_MODEL[up])) ? up : null
   if (offer) {
     await update($, offerAt, () => 0)
     try {
@@ -549,8 +642,8 @@ async function applyScore($: EngineInterface, scored: Scored, generation: number
     notes.push(modelNote(modelName(TIER_MODEL[offer]), modelName(own)))
   }
   // A task that ends a flow in its last stage did not read the flow file as it started: the file may have changed.
+  // Any other read it, and its skills, as its prompt came.
   if (was.stage !== null) await loadFlow($)
-  else await checkSkills($)
   const isAsked = routeOf(score.size, await isFlowAvailable($)) === 'ask' && !(said.flow && isSizeAtMost(score.size, said.flow))
   if (isAsked) {
     await setTask($, (t): Task => ({ ...t, isFlowInvited: true }))
@@ -607,6 +700,9 @@ let scoreGeneration = 0
 // The timer that looks for a new version.
 let lookTimer: Timer | undefined
 
+// Whether the last score ran out of time: a plain variable, as it only shortens the next wait.
+let isHaikuSlow = false
+
 export const register: Register = on => {
   // Once the session has started in its folder: the project, its switches and history, and the language.
   on('session.start', async ($, e, next) => {
@@ -619,13 +715,18 @@ export const register: Register = on => {
     await update($, handed, () => ({}))
     await update($, isScoring, () => false)
     scoreGeneration += 1
+    isHaikuSlow = false
     await update($, declined, (): Declined => ({ flow: null, model: null }))
     await update($, turnLog, () => EMPTY_TURN)
     await update($, isRed, () => false)
     await update($, heldEffort, () => null)
+    await update($, cache, () => NO_CACHE_USE)
+    await update($, moved, () => ({ answered: [], failed: [] }))
     try {
       await update($, isHoldingEffort, () => true)
       if ((await $.store.get(STORE_HOLD_EFFORT)) === false) await update($, isHoldingEffort, () => false)
+      const seenBefore = cacheSeenFrom(await $.store.get(STORE_CACHE_SEEN))
+      await update($, cacheSeen, () => seenBefore)
       await loadProject($)
       // The session's own effort is known from its first request, not from an earlier session's.
       await update($, sessionEffort, () => null)
@@ -694,6 +795,9 @@ export const register: Register = on => {
         scoring: scoreGeneration,
         heldEffort: await read($, heldEffort),
         isHoldingEffort: await read($, isHoldingEffort),
+        cache: await read($, cache),
+        moved: await read($, moved),
+        cacheSeen: await read($, cacheSeen),
         running: await read($, running),
       },
       null,
@@ -753,7 +857,11 @@ export const register: Register = on => {
   on('tool.call', { tool: 'Skill' }, async ($, e, next) => {
     const ran = await next(e)
     // Only a skill that ran: one the engine refused (a user-invoked skill) starts no stage.
-    if (ran.deny === undefined && ran.isError !== true) await stageSign($, e.agentId, stageOfSkill(await flowOf($), e.skill))
+    if (ran.deny === undefined && ran.isError !== true) {
+      // A skill may run for minutes in a sub-agent of its own.
+      await readAfresh($)
+      await stageSign($, e.agentId, stageOfSkill(await flowOf($), e.skill))
+    }
     return ran
   }).catch(($, e, next) => next(e))
 
@@ -776,18 +884,23 @@ export const register: Register = on => {
   // available. A go-on reply, a reply to what Claude said, a slash command or a row the person did not type keeps the
   // task under way.
   on('prompt.submit', async ($, e, next) => {
+    // A row the person did not type, an empty one or a go-on asks for no new work and starts no stage: nothing is
+    // read for it.
+    if (!isPerson(e.origin) || (!e.command && (e.isMeta || !e.text.trim() || isGoOn(e.text)))) return next(e)
     // The session moved to another project (a host's directory change): its switches and history come with it.
     if ((await read($, project))?.root !== (await $.session.root())) await loadProject($)
-    // The project's flow file is read again for each new task; a flow under way keeps the one it started with.
-    if ((await read($, task)).stage === null) await loadFlow($)
+    // The project's flow file is read again for each new task; a flow under way keeps the one it started with. A
+    // command needs it now, to know a stage's; a prompt has it read while Haiku reads the request.
+    const isFlowFree = (await read($, task)).stage === null
+    if (e.command && isFlowFree) await loadFlow($)
     const flow = await flowOf($)
     // A stage command the person types starts its stage, and the flow with it (Matt's tdd only inside the flow).
-    const typed = e.command && isPerson(e.origin) ? stageOfSkill(flow, e.command.name) : null
+    const typed = e.command ? stageOfSkill(flow, e.command.name) : null
     const stageNotes = typed && e.command && (startsFlow(flow, e.command.name) || (await read($, task)).stage !== null) ? (await moveToStage($, typed, 'person')).notes : []
     // A command typed with words after it (`/fix-bug the cart total`) asks for work like a prompt; one alone, or the
     // mod's own, or a stage's, keeps the task under way.
     const isCommandWork = !!e.command && !typed && e.command.name !== 'open-effort' && e.command.args.trim() !== ''
-    if (e.isMeta || (e.command && !isCommandWork) || !isPerson(e.origin) || !e.text.trim() || isGoOn(e.text) || !(await read($, isOn))) return next(withContext(e, stageNotes))
+    if (e.isMeta || (e.command && !isCommandWork) || !e.text.trim() || isGoOn(e.text) || !(await read($, isOn))) return next(withContext(e, stageNotes))
     // Inside the flow, what the person types is part of it: no new task, no score. In its last stage (Matt's retro), a
     // reply to it keeps the flow and new work ends it, as the score says.
     const inStage = (await read($, task)).stage
@@ -804,13 +917,23 @@ export const register: Register = on => {
     const under = await read($, task)
     await update($, before, () => under)
     const said = under.score !== null || under.effort !== null ? await lastSaid($) : ''
+    const askedAt = await $.clock.now()
     try {
       await update($, seenLast, last => ({ ...last, haikuCalls: (last.haikuCalls ?? 0) + 1 }))
     } catch {
       // The report misses one call.
     }
+    // The flow file and the session's skills are read while Haiku reads the request, not before it.
+    const flowRead = !e.command && isFlowFree ? loadFlow($).catch(() => undefined) : Promise.resolve()
     // A call that fails is no score, never a rejection: the wait for the score always ends.
     const scored = await scoreRequest($, e.text, said || undefined).catch((): Scored => ({ score: null, outcome: 'error' }))
+    await flowRead
+    try {
+      const scoreMs = (await $.clock.now()) - askedAt
+      await update($, seenLast, last => ({ ...last, scoreMs }))
+    } catch {
+      // The report misses how long the score took.
+    }
     // The person pressed Esc on the wait: this prompt never started, so the task under way stays as it was.
     if (next.signal.aborted) {
       if (scoreGeneration === generation) await update($, isScoring, () => false)
@@ -826,10 +949,12 @@ export const register: Register = on => {
   }).catch(($, e, next) => next(e))
 
   // Each main-session request goes out at the rung the task stands on: its effort, on the task's model (the session's
-  // unless the person took a model offer or the Main Flow moved it), and Fable 5.1 once it climbed there. The
+  // unless the person took a model offer or the Main Flow moved it), and Fable once it climbed there. The
   // session's own effort and model are kept for the band, and what went out for the turn's history entry.
   on('turn.step', async function* ($, e, next) {
     let sent = e
+    // When the main session's request goes out, with the mod on: what the cache did with it is counted from then.
+    let sentAt: number | null = null
     if (e.agentId === undefined) {
       const raw = e.effort
       try {
@@ -846,22 +971,25 @@ export const register: Register = on => {
         if ((await read($, sessionModel)) !== e.model) await update($, sessionModel, () => e.model)
         if (await read($, isOn)) {
           // While a new prompt's score is on its way, the task under way is not yet known to go on: the request keeps
-          // its model, Fable 5.1 included, so the prompt cache holds, and leaves its effort for the session's own.
+          // its model, Fable included, so the prompt cache holds, and leaves its effort for the session's own.
           const under = await read($, task)
           const t = (await read($, isScoring)) ? { ...FRESH_TASK, model: under.model, climbModel: under.climbModel, isOnFable: under.isOnFable || !!under.climbed?.isFable, effort: carried } : under
           const runsOn = taskModel(t, e.model) ?? e.model
           const rung = rungOf(t, null, runsOn)
-          // The task's model: the one the person chose for it, or Fable 5.1 once it climbed there.
-          const model = rung?.isFable ? (isFable(runsOn) ? runsOn : FABLE_MODEL) : runsOn
+          // The task's model: the one the person chose for it, or Fable once it climbed there. One that did not answer
+          // this session is not asked again: the request stays on the session's.
+          const wants = rung?.isFable ? (isFable(runsOn) ? runsOn : FABLE_MODEL) : runsOn
+          const model = wants !== e.model && (await isUnusable($, wants)) ? e.model : wants
           // The rung's effort when the model takes efforts and the request carried one or moves to it; a model that
           // takes none goes without, as it came.
           const wanted = rung && supportedEfforts(model).length > 0 && (carried || model !== e.model) ? rung.effort : null
           const now = await $.clock.now()
+          sentAt = now
           // The person's own /effort, a request that carries another, frees it too; a request that carries none stays so.
           const last = await read($, heldEffort)
           const held = last?.carried === carried ? last : null
-          const kept = (await read($, isHoldingEffort)) && (carried || wanted) ? keptEffort(held, wanted ?? carried ?? 'medium', !!t.climbed, model, now, e.messageCount) : null
-          const effort = kept ? fitEffort(kept, model) : wanted
+          const kept = (await read($, isHoldingEffort)) && (carried || wanted) ? keptEffort(held, wanted ?? carried ?? 'medium', !!t.climbed, model, now, e.messageCount, await cacheRule($, model)) : null
+          const effort = kept ? fitEffort(kept, model) : wanted ? fitEffort(wanted, model) : null
           const goesAt = effort ?? carried
           if (goesAt) await update($, heldEffort, () => ({ effort: fitEffort(goesAt, model), carried, model, at: now, messageCount: e.messageCount }))
           if (model !== e.model || (effort && effort !== e.effort)) sent = { ...e, ...(effort ? { effort } : {}), ...(model !== e.model ? { model } : {}) }
@@ -869,6 +997,7 @@ export const register: Register = on => {
       } catch {
         // The request goes out as it came.
         sent = e
+        sentAt = null
       }
     } else if (e.agentId !== undefined && isEffort(e.effort)) {
       // A sub-agent's request: at the effort its stalls climbed it to, else as its Agent call started it.
@@ -878,7 +1007,8 @@ export const register: Register = on => {
         if (await read($, isOn)) {
           const agent = await subAgent($, id)
           // A ticket's sub-agent whose climbs moved it up a family runs on that family's model from then on.
-          const model = agent.tier && tierOf(e.model) !== agent.tier ? TIER_MODEL[agent.tier] : e.model
+          const tierModel = agent.tier && tierOf(e.model) !== agent.tier ? TIER_MODEL[agent.tier] : e.model
+          const model = tierModel !== e.model && (await isUnusable($, tierModel)) ? e.model : tierModel
           if (agent.climbed) sent = { ...e, model, effort: fitEffort(agent.climbed, model) }
           // What its requests carry, and on which model, so its climbs step through the efforts that model takes.
           if (!agent.climbed || agent.model !== model) await update($, agents, all => withAgent(all, id, { ...agent, model, ...(agent.climbed ? {} : { effort: carried }) }))
@@ -894,6 +1024,21 @@ export const register: Register = on => {
       const effort = out.effort
       await update($, turnLog, (log): TurnLog => ({ ...log, sent: [...log.sent, { effort, model: out.model }] }))
     }
+    // A request moved to another model: whether that model answers. Esc on the request is no answer of the model's.
+    if (out.model !== e.model && !next.signal.aborted) {
+      try {
+        await movedTo($, out.model, e.model, result.stopReason !== null, out.agentId === undefined)
+      } catch {
+        // The next request on it is counted instead.
+      }
+    }
+    if (out.agentId === undefined && sentAt !== null && result.stopReason !== null && result.usage) {
+      try {
+        await cacheUsed($, out, result.usage, sentAt)
+      } catch {
+        // The count misses one request.
+      }
+    }
     return result
   })
 
@@ -901,7 +1046,7 @@ export const register: Register = on => {
   on('tool.call', { tool: 'Agent' }, async ($, e, next) => {
     if (e.model !== undefined || e.effort !== undefined || !(await read($, isOn))) return next(e)
     // A sub-agent starts from the task's starting point: its own effort (or the session's) on its model. The main
-    // session's climbs and the Fable 5.1 they reached are for its own stalls, not a new agent's search or plan. While
+    // session's climbs and the Fable model they reached are for its own stalls, not a new agent's search or plan. While
     // a new prompt's score is on its way, the task under way is not yet known to go on: only its model holds.
     const under = await read($, task)
     // The model a climb moved the main session to is for its own stalls too: a new agent starts on the task's.
@@ -929,6 +1074,8 @@ export const register: Register = on => {
         // A call refused, or failed, leaves nothing behind. One that started its agent answers with the agent's id:
         // the agent takes up its ticket now, if its first turn's start did not already.
         const started = (ran.result as { agentId?: unknown } | undefined)?.agentId
+        // The agent may have run to its end meanwhile, its first turn having taken the ticket up.
+        await readAfresh($)
         if (ran.deny !== undefined || ran.isError === true) await dropHanded($, toolUseId)
         else if (typeof started === 'string') await takeUpTicket($, started, toolUseId)
         return ran
@@ -957,38 +1104,60 @@ export const register: Register = on => {
     await stageSign($, e.agentId, stageOfPath(await flowOf($), e.command))
     const ran = await next(e)
     // Only a check whose exit is its own counts: a piped, hidden or backgrounded one says nothing either way.
-    if (ran.deny !== undefined || checkRun(e.command, e.run_in_background === true) !== 'counted' || !(await read($, isOn))) return ran
+    if (ran.deny !== undefined || checkRun(e.command, e.run_in_background === true) !== 'counted') return ran
+    // The command may have run for minutes, and other calls beside it: what is read from here on is as it stands
+    // now, and each change is made to the value as it stands when written, so two checks at once both count.
+    await readAfresh($)
+    if (!(await read($, isOn))) return ran
     const id = e.agentId
     const passed = ran.isError !== true
     if (id !== undefined) {
-      const agent = await subAgent($, id)
-      if (!agent.isClimbable) return ran
-      // The first failure after it wrote a test is the red step of test-first work: no stall.
-      if (agent.isRed) {
-        await update($, agents, all => withAgent(all, id, { ...agent, isRed: false }))
-        if (!passed) return ran
-      }
+      const known = await subAgent($, id)
+      if (!known.isClimbable) return ran
       // The family it climbs from: its ticket's, else the model its requests go out on, else the task's.
-      const startTier: ModelTier = agent.tier ?? tierOf(agent.model ?? null) ?? tierOf(taskModel({ ...(await read($, task)), climbModel: null }, await read($, sessionModel))) ?? 'opus'
-      const after = agent.ticket ? afterTicketAgentCheck({ ...agent, isRed: false }, passed, startTier) : afterAgentCheck({ ...agent, isRed: false }, passed, agent.model ?? null)
-      await update($, agents, all => withAgent(all, id, after))
+      const taskTier = tierOf(taskModel({ ...(await read($, task)), climbModel: null }, await read($, sessionModel))) ?? 'opus'
+      await update($, agents, all => {
+        const agent = all[id] ?? known
+        // The first failure after it wrote a test is the red step of test-first work: no stall.
+        if (agent.isRed && !passed) return withAgent(all, id, { ...agent, isRed: false })
+        const startTier: ModelTier = agent.tier ?? tierOf(agent.model ?? null) ?? taskTier
+        return withAgent(all, id, agent.ticket ? afterTicketAgentCheck({ ...agent, isRed: false }, passed, startTier) : afterAgentCheck({ ...agent, isRed: false }, passed, agent.model ?? null))
+      })
       return ran
     }
     // The first failure after a test was written is the red step of test-first work: no stall.
-    if (await read($, isRed)) {
-      await update($, isRed, () => false)
-      if (!passed) return ran
-    }
+    const red = { was: false }
+    await update($, isRed, is => {
+      red.was = is
+      return false
+    })
+    if (red.was && !passed) return ran
     const own = await read($, sessionEffort)
     // The model the session's last request went out on; before any request, the one /model shows.
-    const model = taskModel(await read($, task), (await read($, sessionModel)) ?? (await sessionModelNow($)))
+    const seenModel = (await read($, sessionModel)) ?? (await sessionModelNow($))
     // A model that takes no effort has no ladder to climb: its checks change nothing.
-    if (supportedEfforts(model).length === 0) return ran
-    const standing = await read($, task)
-    const rung = rungOf(standing, own ?? 'medium', model)
-    const inForce = rung && (await read($, isHoldingEffort)) ? keptEffort(await read($, heldEffort), rung.effort, false, model, await $.clock.now(), Number.MAX_SAFE_INTEGER) : null
-    const out = afterCheck(standing, ran.isError !== true, own, model, inForce)
-    await setTask($, () => out.task)
+    if (supportedEfforts(taskModel(await read($, task), seenModel)).length === 0) return ran
+    const isHolding = await read($, isHoldingEffort)
+    const held = await read($, heldEffort)
+    const rules = await read($, cacheSeen)
+    const failed = (await read($, moved)).failed
+    const now = await $.clock.now()
+    const got: { out: ReturnType<typeof afterCheck> | null; model: string | null } = { out: null, model: null }
+    await setTask($, standing => {
+      const model = taskModel(standing, seenModel)
+      got.out = null
+      got.model = model
+      if (supportedEfforts(model).length === 0) return standing
+      const rung = rungOf(standing, own ?? 'medium', model)
+      const inForce = rung && isHolding ? keptEffort(held, rung.effort, false, model, now, Number.MAX_SAFE_INTEGER, model ? cacheRuleOf(rules[model]) : null) : null
+      // The next model up did not answer this session: there is none to offer, as if the person had kept this one.
+      const up = tierAbove(model)
+      const from = up && failed.includes(TIER_MODEL[up]) ? { ...standing, isClimbDeclined: true } : standing
+      got.out = afterCheck(from, passed, own, model, inForce)
+      return got.out.task
+    })
+    const out = got.out
+    if (!out) return ran
     if (out.hasClimbed) await update($, turnLog, (log): TurnLog => ({ ...log, climbs: log.climbs + 1 }))
     const notes = out.hasReachedLadderEnd ? [LADDER_END_NOTE] : []
     // At the top effort of its model the task moves one family up only on the person's yes: Claude stops and asks.
@@ -1000,7 +1169,7 @@ export const register: Register = on => {
       } catch {
         // Any question asked counts.
       }
-      notes.push(climbOfferNote(modelName(TIER_MODEL[out.offer]), modelName(model)))
+      notes.push(climbOfferNote(modelName(TIER_MODEL[out.offer]), modelName(got.model)))
     }
     return withContext(ran, notes)
   }).catch(($, e, next) => next(e))
@@ -1083,7 +1252,7 @@ export const register: Register = on => {
     const own = await read($, sessionEffort)
     const wanted = rungOf(t, own, model)
     // The effort the next request will keep, on a model where changing it restarts the prompt cache.
-    const kept = wanted && (await read($, isHoldingEffort)) ? keptEffort(await read($, heldEffort), wanted.effort, !!t.climbed, model, await $.clock.now(), Number.MAX_SAFE_INTEGER) : null
+    const kept = wanted && (await read($, isHoldingEffort)) ? keptEffort(await read($, heldEffort), wanted.effort, !!t.climbed, model, await $.clock.now(), Number.MAX_SAFE_INTEGER, await cacheRule($, model)) : null
     const isHeld = !!kept && kept !== wanted?.effort
     const rung = wanted && kept ? { ...wanted, effort: kept } : wanted
     // The flow as the band names it: Matt's as the Main Flow, a project's own by its name.
@@ -1097,11 +1266,13 @@ export const register: Register = on => {
       : t.stage ? { kind: 'stage' }
       : t.score && t.effort ? { kind: 'scored', score: t.score }
       : { kind: 'own' }
-    // Fable 5.1 a climb reached is named; a session that runs on Fable from the start shows it as its model.
+    // The Fable model a climb reached is named; a session that runs on Fable from the start shows it as its model.
     const onFable = !!rung?.isFable && (!isFable(model) || isFable(t.climbModel))
+    // The model requests go out on, by its name: the task's, or the Fable model once it reached it.
+    const effortModel = modelName(rung?.isFable && !isFable(model) ? FABLE_MODEL : model)
     // A prompt held on Haiku: the band says so, or the wait would look like a freeze.
     const isReading = await read($, isScoring)
-    const line = isReading ? `open-effort · ${words.steps.reading}` : words.band(rung?.effort ?? null, onFable, why, t.stage, flowName)
+    const line = isReading ? `open-effort · ${words.steps.reading}` : words.band(rung?.effort ?? null, onFable ? effortModel : null, why, t.stage, flowName)
     // A newer version of the mod, or one installed and not yet loaded: a button of its own says what to do next.
     const up = await read($, updates)
     const nextLabel = up.step === 'updated' ? words.pane.bandReload : newerOf(up) ? words.pane.bandUpdate : null
@@ -1140,8 +1311,6 @@ export const register: Register = on => {
         : t.climbed && isFresh(climbKey)
           ? { label: `${words.steps.climbed} ↑ ${t.climbed.effort}`, tone: onFable ? 'violet' : 'brand', isNew: true, isLeaving: true }
           : undefined
-    // Fable 5.1 once the task reached it, settled back or not: its requests stay there.
-    const effortModel = onFable ? 'Fable 5.1' : modelName(model)
     const steps: Step[] = [
       source === 'stage'
         ? { title: flowName, value: `${t.stage ?? ''}${t.ticket ? ` · ${words.steps.ticket(t.ticket)}` : ''}`, state: 'done', rank: 1 }
@@ -1245,6 +1414,10 @@ export const register: Register = on => {
     const up = await read($, updates)
     const newer = newerOf(up)
     const holding = await read($, isHoldingEffort)
+    // What the hold does on the session's model, and how much of this session's prompts the cache served.
+    const own = await read($, sessionModel)
+    const ownRule = await cacheRule($, own)
+    const use = await read($, cache)
     const command = updateCommand(await $.env.get('CLAUDE_CODE_EXECPATH'))
     // Shown in the card and beside the button in Updates, so a failure is seen where the person pressed.
     const askedRows = (
@@ -1435,6 +1608,8 @@ export const register: Register = on => {
             await $.store.set(STORE_HOLD_EFFORT, value)
           })),
           <Text dimColor>{words.holdEffortNote}</Text>,
+          ...(own && supportedEfforts(own).length > 0 ? [<Text dimColor>{words.holdEffortOn(modelName(own), isEffortBound(own, ownRule), ownRule)}</Text>] : []),
+          ...(use.requests > 0 ? [<Text dimColor>{words.cacheUse(use)}</Text>] : []),
           row(words.flow, toggle('flow-machine-on', 'flow-machine-off', s.flowMachine, value => setSwitches($, x => ({ ...x, flowMachine: value })))),
         )}
       </Box>
