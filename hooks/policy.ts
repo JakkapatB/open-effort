@@ -1,4 +1,4 @@
-import type { Clarity, Effort, ModelTier, Rung, Score, Size, Stage, SubAgent, Task, TicketSetting, HeldEffort } from '../types'
+import type { CacheMark, CacheSeen, Clarity, Effort, HeldEffort, ModelTier, Rung, Score, Size, Stage, SubAgent, Task, TicketSetting } from '../types'
 import { MODEL_TIERS as TIERS, isUnsure } from './score'
 
 export const EFFORTS: readonly Effort[] = ['low', 'medium', 'high', 'xhigh', 'max']
@@ -22,15 +22,17 @@ export const TIER_MODEL: Readonly<Record<ModelTier, string>> = {
   haiku: 'claude-haiku-5-5',
   sonnet: 'claude-sonnet-5-5',
   opus: 'claude-opus-5-5',
-  fable: 'claude-fable-5-1',
+  fable: 'claude-fable-5-2',
 }
 
 /** The model a task moves to past the last effort rung on its own model. */
 export const FABLE_MODEL = TIER_MODEL.fable
 
-/** A model's family; null for one not known. */
+/** A model's family; null for one not known. Mythos, Fable's counterpart for verified organizations, counts as Fable. */
 export function tierOf(model: string | null): ModelTier | null {
-  return TIERS.find(tier => model !== null && model.toLowerCase().includes(tier)) ?? null
+  const id = model?.toLowerCase() ?? ''
+  if (id.includes('mythos')) return 'fable'
+  return TIERS.find(tier => id.includes(tier)) ?? null
 }
 
 /** The family to offer for a task: the one Haiku named when it is above the session model's; never a step down. */
@@ -69,7 +71,7 @@ export function tierAbove(model: string | null): ModelTier | null {
 }
 
 export function isFable(model: string | null): boolean {
-  return model !== null && /fable/i.test(model)
+  return tierOf(model) === 'fable'
 }
 
 function atLeast(effort: Effort, floor: Effort): Effort {
@@ -151,7 +153,7 @@ export function enteredStage(task: Task, stage: Stage, effort: Effort): Task {
  */
 export function usedStageSkill(task: Task, stage: Stage, floor: Effort, own: Effort | null, model: string | null): Task {
   const effort = atLeast(task.effort ?? own ?? floor, floor)
-  // A climb that stands below the new effort is left behind; one above it, or on Fable 5.1, stays.
+  // A climb that stands below the new effort is left behind; one above it, or on Fable, stays.
   const isBelow = !!task.climbed && !task.climbed.isFable && EFFORTS.indexOf(task.climbed.effort) <= EFFORTS.indexOf(effort)
   return {
     ...task,
@@ -164,7 +166,7 @@ export function usedStageSkill(task: Task, stage: Stage, floor: Effort, own: Eff
 
 /**
  * Where a task stands: the rung a stall moved it to, else its starting point (its own effort, else `own`, the
- * session's), on Fable 5.1 once it reached it or when `model`, the one the task runs on, is Fable; null with no
+ * session's), on Fable once it reached it or when `model`, the one the task runs on, is Fable; null with no
  * effort to stand on.
  */
 export function rungOf(task: Task, own: Effort | null, model: string | null): Rung | null {
@@ -178,7 +180,7 @@ export function rungOf(task: Task, own: Effort | null, model: string | null): Ru
 }
 
 /**
- * The rung above on the model the task runs on (`model`): the next effort it takes up to xhigh, or on Fable 5.1 up to
+ * The rung above on the model the task runs on (`model`): the next effort it takes up to xhigh, or on Fable up to
  * max; null at the top. A model one family up is never climbed to here: the person is asked first (afterCheck).
  */
 export function rungAbove(rung: Rung, model: string | null = null): Rung | null {
@@ -195,10 +197,21 @@ export function rungAbove(rung: Rung, model: string | null = null): Rung | null 
 /** How long the prompt cache outlives the last request, as measured: past this a change of effort costs nothing. */
 export const CACHE_LIFE_MS = 60 * 60 * 1000
 
-/** Whether changing the effort restarts the prompt cache on `model`: every model that takes effort but those measured to hold it. */
-export function isEffortBound(model: string | null): boolean {
+/** What a model's requests showed when the effort changed between two of them: the prompt cache held, or started afresh. */
+export type CacheRule = 'holds' | 'restarts'
+
+// The models measured to keep their prompt cache through a change of effort, in the Claude Code desktop app.
+const MEASURED_TO_HOLD = /^claude-(fable-5-[12]|(opus|sonnet|haiku)-5-5)(?!\d|-\d{1,7}\b)/
+
+/**
+ * Whether changing the effort restarts the prompt cache on `model`: what this machine's own requests showed (`seen`),
+ * else every model that takes effort but those measured to hold it.
+ */
+export function isEffortBound(model: string | null, seen: CacheRule | null = null): boolean {
+  if (supportedEfforts(model).length === 0) return false
+  if (seen) return seen === 'restarts'
   const id = (model ?? '').replace(/^.*?(claude-)/, '$1')
-  return supportedEfforts(model).length > 0 && !/^claude-(fable-5-1|(opus|sonnet|haiku)-5-5)(?!\d|-\d{1,7}\b)/.test(id)
+  return !MEASURED_TO_HOLD.test(id)
 }
 
 /**
@@ -206,11 +219,70 @@ export function isEffortBound(model: string | null): boolean {
  * on a model that holds its cache, after a change of model, with the cache already gone (too long since the last
  * request, or fewer messages, which is a compaction), or for a climb above the kept effort.
  */
-export function keptEffort(held: HeldEffort | null, wanted: Effort, isClimb: boolean, model: string | null, now: number, messageCount: number): Effort | null {
-  if (!held || !isEffortBound(model) || held.model !== model) return null
+export function keptEffort(
+  held: HeldEffort | null,
+  wanted: Effort,
+  isClimb: boolean,
+  model: string | null,
+  now: number,
+  messageCount: number,
+  seen: CacheRule | null = null,
+): Effort | null {
+  if (!held || !isEffortBound(model, seen) || held.model !== model) return null
   if (now - held.at >= CACHE_LIFE_MS || messageCount < held.messageCount) return null
   if (isClimb && EFFORTS.indexOf(wanted) > EFFORTS.indexOf(held.effort)) return null
   return held.effort
+}
+
+/** How long after a request the next one surely finds its cache entry: under the shortest life an entry has, five minutes. */
+export const CACHE_SURE_MS = 4 * 60 * 1000
+
+/** How much conversation, in tokens, two requests must share past the session's first for the cache to say anything. */
+export const CACHE_EVIDENCE_TOKENS = 2048
+
+/** Changes of effort in a row that kept the cache before a model is trusted to hold it. */
+export const KEPT_TO_TRUST = 2
+
+/**
+ * What two main-session requests in a row say about the cache when the effort changed between them: `kept` when the
+ * second read the first's conversation from the cache, `lost` when it did not; null when they say nothing: the same
+ * effort, another model, too long apart, fewer messages (a compaction), or too little conversation past `base` (the
+ * prompt of the session's first request: its system prompt and tools outlive a change of effort, so only what came
+ * after tells the two apart).
+ */
+export function cacheSeenBy(before: CacheMark | null, base: number, now: CacheMark, read: number): 'kept' | 'lost' | null {
+  if (!before || before.effort === now.effort || before.model !== now.model || before.answered !== now.answered) return null
+  if (now.at - before.at > CACHE_SURE_MS || now.messageCount <= before.messageCount) return null
+  const grown = before.prompt - base
+  if (grown < CACHE_EVIDENCE_TOKENS) return null
+  const missing = before.prompt - read
+  return missing <= grown / 4 ? 'kept' : missing >= (grown * 3) / 4 ? 'lost' : null
+}
+
+/**
+ * What a model has shown, with one more change of effort seen: one loss holds its effort from then on, and keeps
+ * are counted only as far as trust needs.
+ */
+export function withCacheSeen(seen: CacheSeen | undefined, outcome: 'kept' | 'lost'): CacheSeen {
+  return outcome === 'lost' ? { kept: 0, isLost: true } : { kept: Math.min(KEPT_TO_TRUST, (seen?.kept ?? 0) + 1), isLost: false }
+}
+
+/** What the store kept of each model's cache: entries of the wrong shape dropped. */
+export function cacheSeenFrom(stored: unknown): Record<string, CacheSeen> {
+  if (!stored || typeof stored !== 'object' || Array.isArray(stored)) return {}
+  return Object.fromEntries(
+    Object.entries(stored as Record<string, unknown>).flatMap(([model, seen]) => {
+      const s = seen as { kept?: unknown; isLost?: unknown } | null
+      return s && typeof s.kept === 'number' && typeof s.isLost === 'boolean' ? [[model, { kept: s.kept, isLost: s.isLost }] as const] : []
+    }),
+  )
+}
+
+/** What a model's own requests say of it: null until they say enough, and the measured list stands. */
+export function cacheRuleOf(seen: CacheSeen | undefined): CacheRule | null {
+  if (!seen) return null
+  if (seen.isLost) return 'restarts'
+  return seen.kept >= KEPT_TO_TRUST ? 'holds' : null
 }
 
 /** The effort a task starts at on a model a climb moved it to. */
@@ -279,7 +351,7 @@ function effortAbove(here: Effort, top: Effort, model: string | null): Effort | 
 /**
  * What a sub-agent of a built-in type starts with: Explore on Haiku at low, Plan at high and general-purpose (the
  * type when none is named) at the main session's current effort. Plan and general-purpose run on the task's model:
- * `taskTier` is its family when it is not the session's (the flow's Opus 5.5, an accepted offer, Fable 5.1), else
+ * `taskTier` is its family when it is not the session's (the flow's Opus 5.5, an accepted offer, Fable), else
  * null and the sub-agent keeps the session's. Any other type is the person's own and gets null: left as it is.
  */
 export function subAgentStart(type: string | undefined, main: Effort | null, taskTier: ModelTier | null = null): { model?: ModelTier; effort?: Effort } | null {
@@ -334,7 +406,7 @@ export function ticketLinesOf(text: string): Partial<TicketSetting> {
 
 /**
  * The main session takes up a ticket in the stage that works tickets: its effort, a fresh count of checks; the task's model
- * stays, and Fable 5.1 a climb on the last ticket reached is left behind.
+ * stays, and Fable a climb on the last ticket reached is left behind.
  */
 export function enteredTicket(task: Task, ticket: string, effort: Effort): Task {
   return {
@@ -354,7 +426,7 @@ export function enteredTicket(task: Task, ticket: string, effort: Effort): Task 
 /**
  * A check a ticket's sub-agent ran: a pass clears the count; the third failure in a row climbs it, its effort first
  * up to xhigh through the efforts its model takes, then its model one family up at high, as far as Opus: a sub-agent
- * cannot ask the person, and Fable 5.1 is only ever reached with their yes. A ticket that names Fable climbs to max.
+ * cannot ask the person, and Fable is only ever reached with their yes. A ticket that names Fable climbs to max.
  * At the top it stays, and its work goes back to Claude.
  */
 export function afterTicketAgentCheck(agent: SubAgent, passed: boolean, startTier: ModelTier): SubAgent {
@@ -369,7 +441,7 @@ export function afterTicketAgentCheck(agent: SubAgent, passed: boolean, startTie
   return up && up !== 'fable' ? { ...agent, tier: up, climbed: 'high', fails: 0 } : { ...agent, fails: 0 }
 }
 
-/** The model the flow runs on: the frontier model, Fable 5.1, or the session's own. */
+/** The model the flow runs on: the frontier model, Fable, or the session's own. */
 export type FlowModel = 'frontier' | 'fable' | 'session'
 
 export const FLOW_MODELS: readonly FlowModel[] = ['frontier', 'fable', 'session']

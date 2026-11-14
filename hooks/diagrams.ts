@@ -2,7 +2,7 @@ import type { HistoryEntry, Stage, Task } from '../types'
 import { EFFORTS, isFable } from './policy'
 import { clockTime, modelName } from './words'
 
-/** How a step stands: done, in effect now, needing attention, on Fable 5.1, at the ladder's end, or idle. */
+/** How a step stands: done, in effect now, needing attention, on Fable, at the ladder's end, or idle. */
 export type StepState = 'done' | 'active' | 'alert' | 'violet' | 'red' | 'idle'
 
 /** One step of the band: what the mod did or does, its value, and for the effort a meter of the ladder. */
@@ -362,7 +362,7 @@ export type ChartWords = { tooltip: (entry: HistoryEntry) => string; climbed: st
 
 const LEVELS = ['low', 'medium', 'high', 'xhigh', 'max', 'Fable'] as const
 
-/** A turn's level on the chart's scale: its effort, or the Fable band above max when it ran on Fable 5.1. */
+/** A turn's level on the chart's scale: its effort, or the Fable band above max when it ran on Fable. */
 function levelOf(effort: string, onFable: boolean): number {
   return onFable ? 5 : Math.max(0, EFFORTS.indexOf(effort as (typeof EFFORTS)[number]))
 }
@@ -375,7 +375,7 @@ function sum(efforts: Map<string, { all: number }>): number {
 /**
  * The history as charts that answer questions, `width` wide:
  * - over time, one bar per turn from the effort it started at to the highest it reached, the climb in amber and
- *   Fable 5.1 in violet, effort levels named on the left and times along the bottom; hovering a bar names the turn;
+ *   Fable in violet, effort levels named on the left and times along the bottom; hovering a bar names the turn;
  * - beneath, model and effort together: per model, how many turns started at each effort and how many climbed.
  */
 export function historySvg(entries: readonly HistoryEntry[], width: number, words: ChartWords): Drawing {
@@ -425,8 +425,10 @@ export function historySvg(entries: readonly HistoryEntry[], width: number, word
     parts.push(`<text class="label" x="${anchor === 'end' ? width - 1 : at}" y="${axisY}" text-anchor="${anchor}">${label}</text>`)
   }
   // Model and effort together: each model a heading with its turns, and under it a bar for each effort the turns
-  // started at on it, its climbed share in amber. A turn that reached Fable 5.1 counts there too, at its last effort.
+  // started at on it, its climbed share in amber. A turn that reached Fable counts there too, at its last effort.
   const pairs = new Map<string, Map<string, { all: number; climbed: number }>>()
+  // The headings that name a Fable model: theirs are the violet bars.
+  const fables = new Set<string>()
   const count = (model: string, effort: string, climbed: boolean) => {
     const efforts = pairs.get(model) ?? new Map<string, { all: number; climbed: number }>()
     const c = efforts.get(effort) ?? { all: 0, climbed: 0 }
@@ -437,8 +439,13 @@ export function historySvg(entries: readonly HistoryEntry[], width: number, word
     const first = e.models[0]
     const start = e.start ?? e.efforts[0]
     if (first && start) count(modelName(first), start, e.climbs > 0)
+    if (first && isFable(first)) fables.add(modelName(first))
     const last = e.efforts[e.efforts.length - 1]
-    if (e.models.slice(1).some(isFable) && last) count('Fable 5.1', last, false)
+    const reached = e.models.slice(1).find(isFable)
+    if (reached && last) {
+      count(modelName(reached), last, false)
+      fables.add(modelName(reached))
+    }
   }
   const most = Math.max(1, ...[...pairs.values()].flatMap(m => [...m.values()].map(c => c.all)))
   // Each bar's count beside it; a narrow chart says a climb with a short ↑, and the bars leave room for the longest.
@@ -450,7 +457,7 @@ export function historySvg(entries: readonly HistoryEntry[], width: number, word
   parts.push(`<text class="label" x="0" y="${y - 8}">${escape(fit(words.models, 9.5, width - 2))}</text>`)
   const order = [...pairs.entries()].sort((a, b) => sum(b[1]) - sum(a[1]))
   for (const [model, efforts] of order) {
-    const tone = model === 'Fable 5.1' ? 'violet' : 'start'
+    const tone = fables.has(model) ? 'violet' : 'start'
     parts.push(`<rect class="bar ${tone}" x="0" y="${y - 1}" width="8" height="8" rx="2"/><text class="value" x="12" y="${y + 7}" style="font-size:10.5px">${escape(model)}</text><text class="label" x="${12 + textWidth(model, 10.5) + 6}" y="${y + 7}">${sum(efforts)}</text>`)
     y += 15
     for (const effort of EFFORTS) {

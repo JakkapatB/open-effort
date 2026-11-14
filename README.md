@@ -20,7 +20,7 @@
 ## What it does
 
 - 🎯 **Fits the effort.** Haiku reads each new request: a clear plan starts at `low`, a hard one at `xhigh`.
-- 📈 **Raises the effort when stuck.** Three failing checks in a row raise the effort one level. Past the highest level, Claude asks whether to move up one model (Sonnet → Opus → Fable 5.1), and only with your yes does it move. If checks still fail at the top, Claude stops and asks you what to do.
+- 📈 **Raises the effort when stuck.** Three failing checks in a row raise the effort one level. Past the highest level, Claude asks whether to move up one model (Sonnet → Opus → Fable 5.2), and only with your yes does it move. If checks still fail at the top, Claude stops and asks you what to do.
 - 🧠 **Asks before switching models.** If the work needs a stronger model than the session's, Claude asks you first.
 - 🗺️ **Runs Matt Pocock's Main Flow.** Grill to retro, every stage and every ticket at its own effort.
 - 👀 **Shows what it uses, and why.** A band above the prompt shows the effort and model in use; a pane holds the switches, themes and history.
@@ -165,8 +165,8 @@ The mod never picks `max` by itself.
 - Claude moves the flow from stage to stage with the `stage` tool. A stage's skill Claude uses on its own (a review of its own work during implement) only raises the effort: it does not move the flow.
 - Work you choose to do directly keeps the same care: when Claude uses one of the flow's skills on it (code-review, tdd), the task keeps at least that stage's effort and, while the Main Flow is on, moves to the flow's model, for the rest of the task. The band shows it as "Matt's skill · direct".
 - If you turn the flow or a stronger model down, you are not asked again this session for work no larger, or for a model no more capable.
-- A model a climb moved to in the flow, Fable 5.1 included, lasts until the next stage or ticket.
-- The flow runs on **Opus 5.5** by default. Pick **Fable 5.1** or **the session's model** in the pane.
+- A model a climb moved to in the flow, Fable included, lasts until the next stage or ticket.
+- The flow runs on **Opus 5.5** by default. Pick **Fable 5.2** or **the session's model** in the pane. A session already on a Fable model stays on it.
 - Each ticket can set its own `Model:` and `Effort:`. A sub-agent given a ticket uses the model and effort the ticket sets.
 - Needs [Matt Pocock's skills](https://github.com/mattpocock/skills). The pane says which are missing.
 
@@ -210,8 +210,8 @@ A general-purpose sub-agent's effort follows the stage it runs in: the code-revi
 | **Your session's model** (the one you picked with `/model`) | Everything, unless a row below says otherwise |
 | **A stronger model Haiku suggests** | The whole task, only if you say yes when Claude asks at the start |
 | **Opus 5.5** | The whole Main Flow (change it in the pane), and direct work once Claude uses one of the flow's skills on it. A session already on a stronger model keeps it |
-| **One model up** (Sonnet → Opus → Fable 5.1) | When checks keep failing at the top effort of the task's model, and you say yes when Claude asks; for the rest of the task (in a flow, to the next stage or ticket) |
-| **Fable 5.1** | One model up from Opus, with your yes; in the Main Flow if you pick it; for a ticket that says `Model: fable` |
+| **One model up** (Sonnet → Opus → Fable 5.2) | When checks keep failing at the top effort of the task's model, and you say yes when Claude asks; for the rest of the task (in a flow, to the next stage or ticket) |
+| **Fable 5.2** | One model up from Opus, with your yes; in the Main Flow if you pick it; for a ticket that says `Model: fable`. A session you run on Fable 5.1 or Fable 5 stays on its own |
 | **Haiku** | Reading each new request and each ticket without `Model:` and `Effort:` lines; Explore sub-agents; tickets that say `Model: haiku` |
 | **A ticket's `Model:`** | The sub-agent that works that ticket. When Claude works a ticket itself, it keeps the task's model |
 
@@ -221,7 +221,7 @@ A general-purpose sub-agent's effort follows the stage it runs in: the code-revi
 | `medium` | A known goal whose way needs thought; the lowest for risky work or when Haiku is unsure; the tickets and retro stages |
 | `high` | The plan is not clear yet; the grill, spec and implement stages; Plan sub-agents; the first step on a model a climb moved to |
 | `xhigh` | Unusually hard work; the review stage; the highest a sub-agent climbs to (one working a ticket then moves a model up, as far as Opus 5.5) |
-| `max` | On Fable 5.1, after `high` and `xhigh` there still fail; for a sub-agent on a model with no `xhigh` (Opus or Sonnet 4.6), in its place; or when you set your session to `max` yourself. The mod never picks it at the start |
+| `max` | On Fable, after `high` and `xhigh` there still fail; for a sub-agent on a model with no `xhigh` (Opus or Sonnet 4.6), in its place; or when you set your session to `max` yourself. The mod never picks it at the start |
 
 Three failing checks in a row raise the effort one level; a passing check brings it back to where the task started. A ticket's `Effort:` overrides the stage's effort for that ticket. On models where changing the effort restarts the prompt cache, the effort is held instead: see [What starts the prompt cache afresh](#what-starts-the-prompt-cache-afresh).
 
@@ -256,17 +256,17 @@ A task keeps one model from start to end, to keep the prompt cache. It moves up 
   - The next new task after a task that moved goes back to the session's model. So does the task under way when Haiku cannot read your message, when the Main Flow ends or is switched off, and when the mod is switched off.
   - After you agreed to a stronger model because checks kept failing, the next stage or ticket goes back to the model the flow runs on.
   - A ticket's sub-agent that climbs to the next model starts afresh too, but only its own cache.
-- **Changing the effort, on some models** (see the table below). On those, and on any model not yet measured to hold its cache, the mod now holds the effort: it changes only for a new task, for a first stage, when work is stuck, or when the cache is already gone. A switch in the pane's Advanced section turns this off. On the models that hold it, a passing check, a later stage and a ticket leave it where it is.
+- **Changing the effort, on some models** (see the table below). On those, and on any model not yet measured to hold its cache, the mod now holds the effort: it changes only for a new task, for a first stage, when work is stuck, or when the cache is already gone. A switch in the pane's Advanced section turns this off, and under it the pane says what the hold does on your session's model. The mod also learns from your own requests: when the effort changes and the next request soon after reads the conversation from the cache, or does not, it keeps that for the model on your machine. One loss holds the effort on that model from then on, even one in the table below; two keeps in a row free a model the table does not list. On the models that hold it, a passing check, a later stage and a ticket leave it where it is.
 - **Pressing Reload after an update**, which may.
 
 | Model | Prompt cache when the effort changes |
 |---|---|
-| Fable 5.1, Opus 5.5, Sonnet 5.5, Haiku 5.5 | ✅ Holds |
+| Fable 5.2, Fable 5.1, Opus 5.5, Sonnet 5.5, Haiku 5.5 | ✅ Holds |
 | Opus 5, Opus 4.8, Opus 4.7, Opus 4.6, Sonnet 5, Sonnet 4.6 | ❌ Starts afresh |
 | Fable 5, Opus 4.5 | Not measured |
 | Sonnet 4.5, Haiku 4.5 | They take no effort, so it never changes |
 
-Measured once per model on Claude Code 2.1.309, with the mod off, and again on Opus 5 and Opus 5.5 with it on; other versions may differ.
+Measured once per model on Claude Code 2.1.309, with the mod off, and again on Opus 5 and Opus 5.5 with it on; Fable 5.2 with the mod on, through four changes of effort. Other versions may differ. The pane's Advanced section also shows how much of this session's prompts the cache served.
 
 In one short test on Opus 5.5, the mod's notes did not break the cache.
 
@@ -280,7 +280,7 @@ Test, typecheck, build and lint runs (JavaScript/TypeScript, Python, Go, Rust, N
 
 ### Data and privacy
 
-- Everything stays in Claude Code's plugin store on your machine.
+- Everything stays in Claude Code's plugin store on your machine. Besides your switches, picks and history, it keeps what each model's cache did when the effort changed (a model id and two counts).
 - The history never keeps what you typed: only times, efforts, readings, counts and model names.
 - **The update check.** At most once a day per machine (a read that fails is tried again within 30 minutes), and when you press **Check now**, the mod reads the newest version number: one HTTPS request, through Claude Code, for this project's `.claude-plugin/plugin.json` on raw.githubusercontent.com. Nothing about you or your work is in it; GitHub sees the request as any web visit. Turn the daily check off in the pane's **Updates** section. **Update now** runs Claude Code's own plugin update (`claude plugin marketplace update open-effort`, then `claude plugin update open-effort@open-effort`), and **Reload now** runs `/reload-plugins`; both only when you press them.
 - **What it sends, and where.** Apart from the update check, the mod makes no network calls of its own. It sends text to one place: Claude's Haiku model, through Claude Code's own model call (`$.model.complete`), on your account, like any other Claude Code request. It sends:
@@ -294,9 +294,9 @@ Test, typecheck, build and lint runs (JavaScript/TypeScript, Python, Go, Rust, N
 
 | Hook | What it does | What it changes |
 |---|---|---|
-| `turn.step` | Sets each model request's effort, and its model when the task moved to another one | The request's `effort` and `model` |
+| `turn.step` | Sets each model request's effort, and its model when the task moved to another one; counts what the prompt cache served | The request's `effort` and `model` |
 | `tool.call` on `Agent` | Sets a sub-agent's model and effort by its type, or from a ticket handed to it | The call's `model` and `effort`, only when the call names neither |
-| `prompt.submit` | Reads the project's flow file for each new task; has Haiku read a new request, holding the prompt up to 15 seconds; adds the notes above when there is a question for you or you type a stage's command | Adds context to the prompt; the prompt's text is never changed |
+| `prompt.submit` | Reads the project's flow file for each new task; has Haiku read a new request, holding the prompt up to 15 seconds (5 after a reading that ran out of time, until Haiku answers again); reads nothing for a row you did not type or a short go-on; adds the notes above when there is a question for you or you type a stage's command | Adds context to the prompt; the prompt's text is never changed |
 | `tool.call` on `Bash` | Counts test, lint, build and typecheck runs as passing or failing checks; tells Claude when a stuck task should ask you | Adds context to a failing check's result; the result itself is never changed |
 | `tool.call` on `Read`, `Skill`, `Edit`, `Write` | Notices a stage's skill being used, a ticket being read, a test being written | Nothing |
 | `tool.call` on `mcp__open-effort__stage`, `__model`, `__report` | Answers the mod's own three tools | They are the mod's own tools |
@@ -312,7 +312,8 @@ Test, typecheck, build and lint runs (JavaScript/TypeScript, Python, Go, Rust, N
 
 - The mod API is new in Claude Code and may change.
 - Switching a task's model starts its prompt cache afresh, and on some models so does changing its effort: see [What starts the prompt cache afresh](#what-starts-the-prompt-cache-afresh).
-- A new request waits up to 15 seconds for Haiku's reading; with none by then, it goes at the session's own effort, on the task's model.
+- A new request waits up to 15 seconds for Haiku's reading; with none by then, it goes at the session's own effort, on the task's model. After a reading that ran out of time, the next ones wait 5 seconds until Haiku answers again.
+- If a model the mod moves a task to does not answer its first request (your account or platform may not have it), that request fails once, the task goes back to the session's model, a toast says so, and the mod does not move anything to that model again this session.
 - Pressing Esc or Stop during that wait cancels the request and keeps the task under way, but the desktop app may show "Claude couldn't process that message". Nothing broke: send the message again when you want it.
 - A command typed with words after it (`/fix-typo the title`) counts as a new request; a command alone keeps the task.
 - A resumed session starts with no task; the flow comes back when Claude names its stage.

@@ -60,7 +60,7 @@ test('when the person keeps the session model, nothing moves', async ($, on) => 
   expect(sent.at(-1)?.model).toBe('claude-sonnet-5-5')
 })
 
-test('a task on the model chosen for it climbs from that model, then asks again before Fable 5.1', async ($, on) => {
+test('a task on the model chosen for it climbs from that model, then asks again before Fable 5.2', async ($, on) => {
   const { sent, bash, conversation } = engine(on, { haiku: 'clarity=unclear hard=yes risky=no size=small model=opus sure=85', model: 'claude-sonnet-5-5' })
   await onSonnet($)
   await type($, 'find the race in the queue')
@@ -76,7 +76,7 @@ test('a task on the model chosen for it climbs from that model, then asks again 
   expect(sent.slice(1).map(e => [e.model, e.effort])).toEqual([
     ['claude-opus-5-5', 'xhigh'],
     ['claude-opus-5-5', 'xhigh'],
-    ['claude-fable-5-1', 'high'],
+    ['claude-fable-5-2', 'high'],
   ])
 })
 
@@ -139,5 +139,5 @@ test('a model the person kept is still offered for work that needs a more capabl
   await answer($, 'keep')
   await type($, 'redesign the whole payment system for exactly-once delivery')
 
-  expect(JSON.stringify(submitted.at(-1)?.context ?? '')).toContain('Fable 5.1')
+  expect(JSON.stringify(submitted.at(-1)?.context ?? '')).toContain('Fable 5.2')
 })

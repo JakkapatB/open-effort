@@ -150,8 +150,8 @@ test('the desktop band says held in what it draws', async ($, on) => {
 })
 
 test('models measured to hold the cache are free, and every other that takes effort is held', () => {
-  for (const id of ['claude-fable-5-1', 'claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5', 'claude-opus-5-5-20260101', 'claude-sonnet-4-5', 'claude-haiku-4-5']) expect(isEffortBound(id)).toBe(false)
-  for (const id of ['claude-opus-5', 'claude-sonnet-5', 'claude-opus-4-8', 'claude-opus-4-6', 'claude-sonnet-4-6', 'claude-fable-5', 'claude-fable-5-10']) expect(isEffortBound(id)).toBe(true)
+  for (const id of ['claude-fable-5-2', 'claude-fable-5-1', 'claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5', 'claude-opus-5-5-20260101', 'claude-sonnet-4-5', 'claude-haiku-4-5']) expect(isEffortBound(id)).toBe(false)
+  for (const id of ['claude-opus-5', 'claude-sonnet-5', 'claude-opus-4-8', 'claude-opus-4-6', 'claude-sonnet-4-6', 'claude-fable-5', 'claude-fable-5-10', 'claude-fable-5-3', 'claude-mythos-5-2']) expect(isEffortBound(id)).toBe(true)
 })
 
 test('on Opus 5 a climb raises the effort, a pass keeps it, and a new task frees it', async ($, on) => {
